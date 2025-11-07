@@ -6,11 +6,15 @@ import http from "http";
 import { readFileSync } from "fs";
 import { join } from "path";
 import cors from "cors";
+import session from "express-session";
+import MongoStore from "connect-mongo";
+import authRoutes from "./routes/auth";
 import {
   handleCallConnection,
   handleFrontendConnection,
 } from "./sessionManager";
 import functions from "./functionHandlers";
+import { requireAuth, optionalAuth, AuthRequest } from "./middleware/auth";
 
 dotenv.config();
 
@@ -25,19 +29,38 @@ if (!OPENAI_API_KEY) {
 
 const app = express();
 app.use(cors());
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "dev-secret-change-in-production",
+    resave: false,
+    saveUninitialized: false,
+    store: MongoStore.create({
+      mongoUrl: process.env.DATABASE_URL,
+      touchAfter: 24 * 3600,
+    }),
+    cookie: {
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+    },
+  })
+);
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
-
-app.use(express.urlencoded({ extended: false }));
 
 const twimlPath = join(__dirname, "twiml.xml");
 const twimlTemplate = readFileSync(twimlPath, "utf-8");
 
-app.get("/public-url", (req, res) => {
+app.use("/api/auth", authRoutes);
+
+app.get("/public-url", optionalAuth, (req, res) => {
   res.json({ publicUrl: PUBLIC_URL });
 });
 
-app.all("/twiml", (req, res) => {
+app.all("/twiml", optionalAuth, (req, res) => {
   const wsUrl = new URL(PUBLIC_URL);
   wsUrl.protocol = "wss:";
   wsUrl.pathname = `/call`;
@@ -47,7 +70,7 @@ app.all("/twiml", (req, res) => {
 });
 
 // New endpoint to list available tools (schemas)
-app.get("/tools", (req, res) => {
+app.get("/tools", requireAuth, (req: AuthRequest, res) => {
   res.json(functions.map((f) => f.schema));
 });
 
@@ -72,6 +95,9 @@ wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
   } else if (type === "logs") {
     if (currentLogs) currentLogs.close();
     currentLogs = ws;
+    // Note: Session validation for WebSocket requires additional setup
+    // For now, rely on same-origin policy and upgrade from authenticated HTTP connection
+    // Future: Pass session token in WebSocket connection params
     handleFrontendConnection(currentLogs);
   } else {
     ws.close();

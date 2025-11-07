@@ -1,9 +1,20 @@
+'use client';
+
 import React from "react";
 import { Button } from "@/components/ui/button";
-import { BookOpen, FileText } from "lucide-react";
+import { BookOpen } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/app/context/auth-context";
 
 const TopBar = () => {
+  const { user, logout } = useAuth();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await logout();
+    router.push("/login");
+  };
   return (
     <div className="flex justify-between items-center px-6 py-4 border-b">
       <div className="flex items-center gap-4">
@@ -17,8 +28,21 @@ const TopBar = () => {
         </svg>
         <h1 className="text-xl font-semibold">OpenAI Call Assistant</h1>
       </div>
-      <div className="flex gap-3">
-        <Button variant="ghost" size="sm">
+      <div className="flex items-center gap-3">
+        {user && (
+          <span className="text-sm text-muted-foreground">
+            Signed in as {user.name || user.email}
+          </span>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleLogout}
+          disabled={!user}
+        >
+          Logout
+        </Button>
+        <Button variant="ghost" size="sm" asChild>
           <Link
             href="https://platform.openai.com/docs/guides/realtime"
             className="flex items-center gap-2"
