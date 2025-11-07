@@ -1,7 +1,7 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { CampaignForm } from '@/components/campaign-form'
 
 export default function NewCampaignPage() {
   return (
@@ -14,21 +14,11 @@ export default function NewCampaignPage() {
           </Link>
         </Button>
       </div>
-
       <div>
         <h1 className="text-3xl font-bold">Create Campaign</h1>
         <p className="text-muted-foreground">Configure a new AI calling campaign</p>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Campaign Configuration</CardTitle>
-          <CardDescription>Set up campaign details and AI agent parameters</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">Campaign creation will be implemented in SCO-004</p>
-        </CardContent>
-      </Card>
+      <CampaignForm mode="create" />
     </div>
   )
 }

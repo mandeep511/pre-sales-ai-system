@@ -1,39 +1,126 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import Link from 'next/link'
-import { ArrowLeft, Edit } from 'lucide-react'
+'use client'
 
-export default function CampaignDetailPage({ params }: { params: { id: string } }) {
+import { useEffect, useState } from 'react'
+import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Edit, Trash2 } from 'lucide-react'
+import { campaignApi } from '@/lib/api-client'
+
+export default function CampaignDetailPage() {
+  const params = useParams()
+  const router = useRouter()
+  const [campaign, setCampaign] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    loadCampaign()
+  }, [params.id])
+
+  const loadCampaign = async () => {
+    try {
+      const data = await campaignApi.get(params.id as string)
+      setCampaign(data)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleArchive = async () => {
+    if (confirm('Are you sure you want to archive this campaign?')) {
+      await campaignApi.archive(campaign.id)
+      router.push('/campaigns')
+    }
+  }
+
+  if (loading) return <div className="p-6">Loading...</div>
+  if (!campaign) return <div className="p-6">Campaign not found</div>
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/campaigns">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Campaigns
-          </Link>
-        </Button>
-        
-        <Button asChild>
-          <Link href={`/campaigns/${params.id}/edit`}>
-            <Edit className="h-4 w-4 mr-2" />
-            Edit Campaign
-          </Link>
-        </Button>
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <h1 className="text-3xl font-bold">{campaign.name}</h1>
+            <Badge variant={campaign.status === 'active' ? 'default' : 'secondary'}>
+              {campaign.status}
+            </Badge>
+          </div>
+          <p className="text-muted-foreground">{campaign.description}</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href={`/campaigns/${campaign.id}/edit`}>
+              <Edit className="h-4 w-4 mr-2" />
+              Edit
+            </Link>
+          </Button>
+          <Button variant="destructive" onClick={handleArchive}>
+            <Trash2 className="h-4 w-4 mr-2" />
+            Archive
+          </Button>
+        </div>
       </div>
 
-      <div>
-        <h1 className="text-3xl font-bold">Campaign Details</h1>
-        <p className="text-muted-foreground">Campaign ID: {params.id}</p>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Total Leads</CardDescription>
+            <CardTitle className="text-3xl">{campaign._count?.leads || 0}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Total Calls</CardDescription>
+            <CardTitle className="text-3xl">{campaign._count?.callSessions || 0}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Voice</CardDescription>
+            <CardTitle className="text-xl">{campaign.voice}</CardTitle>
+          </CardHeader>
+        </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Campaign Information</CardTitle>
-          <CardDescription>View campaign configuration and performance</CardDescription>
+          <CardTitle>System Prompt</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">Campaign details will be implemented in SCO-004</p>
+          <pre className="text-sm whitespace-pre-wrap bg-muted p-4 rounded">
+            {campaign.systemPrompt}
+          </pre>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Queue Configuration</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid grid-cols-2 gap-4">
+            <div>
+              <dt className="text-sm text-muted-foreground">Batch Size</dt>
+              <dd className="text-lg font-medium">{campaign.batchSize}</dd>
+            </div>
+            <div>
+              <dt className="text-sm text-muted-foreground">Call Gap</dt>
+              <dd className="text-lg font-medium">{campaign.callGap}s</dd>
+            </div>
+            <div>
+              <dt className="text-sm text-muted-foreground">Max Retries</dt>
+              <dd className="text-lg font-medium">{campaign.maxRetries}</dd>
+            </div>
+            <div>
+              <dt className="text-sm text-muted-foreground">Priority</dt>
+              <dd className="text-lg font-medium">{campaign.priority}</dd>
+            </div>
+          </dl>
         </CardContent>
       </Card>
     </div>

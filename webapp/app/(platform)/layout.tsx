@@ -3,12 +3,13 @@
 import { AuthGuard } from '@/components/auth-guard'
 import { Sidebar } from '@/components/sidebar'
 import { TopBar } from '@/components/top-bar-new'
+import { ReactNode } from 'react'
 
-export default function PlatformLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+type PlatformLayoutProps = {
+  children: ReactNode
+}
+
+export default function PlatformLayout({ children }: PlatformLayoutProps) {
   return (
     <AuthGuard>
       <div className="flex h-screen overflow-hidden">
