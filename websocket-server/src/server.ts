@@ -6,11 +6,14 @@ import http from "http";
 import { readFileSync } from "fs";
 import { join } from "path";
 import cors from "cors";
+import session from "express-session";
 import {
   handleCallConnection,
   handleFrontendConnection,
 } from "./sessionManager";
 import functions from "./functionHandlers";
+import campaignRoutes from "./routes/campaigns";
+import authRoutes from "./routes/auth";
 
 dotenv.config();
 
@@ -24,11 +27,18 @@ if (!OPENAI_API_KEY) {
 }
 
 const app = express();
-app.use(cors());
+app.use(cors({ origin: 'http://localhost:3000', credentials: true }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'your-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { secure: false, httpOnly: true, maxAge: 24 * 60 * 60 * 1000 },
+}));
+
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
-
-app.use(express.urlencoded({ extended: false }));
 
 const twimlPath = join(__dirname, "twiml.xml");
 const twimlTemplate = readFileSync(twimlPath, "utf-8");
@@ -50,6 +60,10 @@ app.all("/twiml", (req, res) => {
 app.get("/tools", (req, res) => {
   res.json(functions.map((f) => f.schema));
 });
+
+// Mount API routes
+app.use("/api/auth", authRoutes);
+app.use("/api/campaigns", campaignRoutes);
 
 let currentCall: WebSocket | null = null;
 let currentLogs: WebSocket | null = null;

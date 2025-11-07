@@ -1,0 +1,143 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      String   @default("user")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaigns             Campaign[]
+  campaignConfigVersions CampaignConfigVersion[]
+  activityLogs          ActivityLog[]
+}
+
+model Campaign {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  status      String   @default("draft") // draft, active, paused, archived
+  
+  // AI Configuration
+  systemPrompt String
+  callGoal     String?
+  voice        String   @default("alloy")
+  
+  // Dynamic configuration (JSON)
+  postCallForm String   @default("[]")
+  tools        String   @default("[]")
+  
+  // Queue settings
+  batchSize   Int      @default(10)
+  callGap     Int      @default(30)
+  maxRetries  Int      @default(3)
+  priority    Int      @default(0)
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String
+  
+  createdBy      User                      @relation(fields: [createdById], references: [id])
+  leads          Lead[]
+  callSessions   CallSession[]
+  configVersions CampaignConfigVersion[]
+}
+
+model Lead {
+  id         String   @id @default(cuid())
+  campaignId String
+  
+  // Contact info
+  name       String
+  phone      String
+  email      String?
+  company    String?
+  
+  // Lead data (JSON)
+  metadata   String   @default("{}")
+  
+  // Status tracking
+  status     String   @default("new") // new, contacted, qualified, unqualified, failed
+  attempts   Int      @default(0)
+  lastCallAt DateTime?
+  
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  campaign     Campaign      @relation(fields: [campaignId], references: [id])
+  callSessions CallSession[]
+}
+
+model CallSession {
+  id         String   @id @default(cuid())
+  campaignId String
+  leadId     String
+  
+  // Call details
+  status     String   @default("pending") // pending, in_progress, completed, failed
+  startedAt  DateTime?
+  endedAt    DateTime?
+  duration   Int?
+  
+  // Results
+  transcript String?
+  summary    String?
+  outcome    String?
+  formData   String?
+  
+  // Technical
+  callSid    String?
+  error      String?
+  
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  campaign Campaign @relation(fields: [campaignId], references: [id])
+  lead     Lead     @relation(fields: [leadId], references: [id])
+}
+
+model CampaignConfigVersion {
+  id         String   @id @default(cuid())
+  campaignId String
+  version    Int
+  
+  // Config snapshot (JSON)
+  snapshot   String
+  
+  // Metadata
+  changes    String?
+  createdAt  DateTime @default(now())
+  createdById String
+  
+  campaign  Campaign @relation(fields: [campaignId], references: [id])
+  createdBy User     @relation(fields: [createdById], references: [id])
+  
+  @@unique([campaignId, version])
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String
+  entityType String
+  entityId   String
+  details    String?
+  createdAt  DateTime @default(now())
+  
+  user User @relation(fields: [userId], references: [id])
+  
+  @@index([entityType, entityId])
+  @@index([userId])
+}
