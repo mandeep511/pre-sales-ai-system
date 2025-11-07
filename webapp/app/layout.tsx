@@ -6,9 +6,9 @@ import { AuthProvider } from "./context/auth-context";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "OpenAI Realtime + Twilio",
+  title: "Pre-Sales AI System",
   description:
-    "Sample phone call assistant app for OpenAI Realtime API and Twilio",
+    "AI-powered outbound calling platform for pre-sales teams",
 };
 
 export default function RootLayout({

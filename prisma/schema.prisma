@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String                   @id @default(auto()) @map("_id") @db.ObjectId
+  email          String                   @unique
+  password       String
+  name           String
+  role           String                   @default("operator")
+  active         Boolean                  @default(true)
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  campaigns      Campaign[]
+  activityLogs   ActivityLog[]
+  configVersions CampaignConfigVersion[]
+}
+
+model Campaign {
+  id             String                   @id @default(auto()) @map("_id") @db.ObjectId
+  name           String
+  description    String?
+  status         String                   @default("draft")
+  systemPrompt   String
+  callGoal       String?
+  voice          String                   @default("alloy")
+  postCallForm   Json?
+  tools          Json?
+  batchSize      Int                      @default(10)
+  callGap        Int                      @default(30)
+  maxRetries     Int                      @default(3)
+  priority       Int                      @default(0)
+  createdById    String                   @db.ObjectId
+  createdBy      User                     @relation(fields: [createdById], references: [id])
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  leads          Lead[]
+  callSessions   CallSession[]
+  configVersions CampaignConfigVersion[]
+  queueState     QueueState?
+}
+
+model CampaignConfigVersion {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  campaignId  String   @db.ObjectId
+  campaign    Campaign @relation(fields: [campaignId], references: [id])
+  version     Int
+  snapshot    Json
+  changes     String?
+  createdAt   DateTime @default(now())
+  createdById String?  @db.ObjectId
+  createdBy   User?    @relation(fields: [createdById], references: [id])
+}
+
+model Lead {
+  id           String        @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  phone        String        @unique
+  email        String?
+  company      String?
+  metadata     Json?
+  tags         String[]      @default([])
+  status       String        @default("new")
+  priority     Int           @default(0)
+  campaignId   String?       @db.ObjectId
+  campaign     Campaign?     @relation(fields: [campaignId], references: [id])
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  lastCalledAt DateTime?
+  callSessions CallSession[]
+}
+
+model CallSession {
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  leadId          String        @db.ObjectId
+  lead            Lead          @relation(fields: [leadId], references: [id])
+  campaignId      String        @db.ObjectId
+  campaign        Campaign      @relation(fields: [campaignId], references: [id])
+  direction       String
+  status          String        @default("queued")
+  twilioCallSid   String?       @unique
+  twilioStreamSid String?
+  fromNumber      String?
+  toNumber        String?
+  queuedAt        DateTime      @default(now())
+  dialedAt        DateTime?
+  answeredAt      DateTime?
+  endedAt         DateTime?
+  duration        Int?
+  configSnapshot  Json?
+  outcome         String?
+  transcript      Transcript?
+  recording       Recording?
+  postCallData    PostCallData?
+}
+
+model Transcript {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  callSessionId String      @unique @db.ObjectId
+  callSession   CallSession @relation(fields: [callSessionId], references: [id])
+  items         Json
+  toolCalls     Json?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model Recording {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  callSessionId String      @unique @db.ObjectId
+  callSession   CallSession @relation(fields: [callSessionId], references: [id])
+  audioUrl      String?
+  format        String?
+  createdAt     DateTime    @default(now())
+}
+
+model PostCallData {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  callSessionId String      @unique @db.ObjectId
+  callSession   CallSession @relation(fields: [callSessionId], references: [id])
+  formData      Json
+  qualified     Boolean?
+  nextSteps     String?
+  followUpDate  DateTime?
+  completedAt   DateTime    @default(now())
+  notes         String?
+}
+
+model QueueState {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  campaignId      String    @unique @db.ObjectId
+  campaign        Campaign  @relation(fields: [campaignId], references: [id])
+  status          String    @default("idle")
+  currentBatch    Json?
+  batchStartedAt  DateTime?
+  nextScheduledAt DateTime?
+  totalQueued     Int       @default(0)
+  totalCompleted  Int       @default(0)
+  totalFailed     Int       @default(0)
+  updatedAt       DateTime  @updatedAt
+}
+
+model ActivityLog {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String?  @db.ObjectId
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entityType String?
+  entityId   String?  @db.ObjectId
+  details    Json?
+  createdAt  DateTime @default(now())
+}

@@ -1,87 +1,104 @@
-'use client';
+'use client'
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect } from 'react'
 
 interface User {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
+  id: string
+  email: string
+  name?: string
+  role: string
 }
 
 interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  checkAuth: () => Promise<void>;
+  user: User | null
+  isLoading: boolean
+  login: (email: string, password: string) => Promise<void>
+  logout: () => Promise<void>
+  checkAuth: () => Promise<void>
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8081'
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
   const checkAuth = async () => {
+    setIsLoading(true)
     try {
-      const response = await fetch("http://localhost:8081/api/auth/me", {
-        credentials: "include",
-      });
+      const response = await fetch(`${API_BASE_URL}/api/auth/me`, {
+        credentials: 'include',
+      })
+
       if (response.ok) {
-        const data = await response.json();
-        setUser(data.user);
+        const data = await response.json()
+        setUser(data.user)
       } else {
-        setUser(null);
+        setUser(null)
       }
     } catch (error) {
-      console.error("Auth check failed:", error);
-      setUser(null);
+      console.error('Auth check failed:', error)
+      setUser(null)
     } finally {
-      setLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   const login = async (email: string, password: string) => {
-    const response = await fetch("http://localhost:8081/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
+    const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ email, password }),
-    });
+    })
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Login failed");
+      let message = 'Login failed'
+      try {
+        const error = await response.json()
+        message = error.error ?? message
+      } catch (err) {
+        console.error('Failed to parse login error response:', err)
+      }
+      throw new Error(message)
     }
 
-    const data = await response.json();
-    setUser(data.user);
-  };
+    const data = await response.json()
+    setUser(data.user)
+    setIsLoading(false)
+  }
 
   const logout = async () => {
-    await fetch("http://localhost:8081/api/auth/logout", {
-      method: "POST",
-      credentials: "include",
-    });
-    setUser(null);
-  };
+    try {
+      await fetch(`${API_BASE_URL}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+    } catch (error) {
+      console.error('Logout failed:', error)
+    } finally {
+      setUser(null)
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    checkAuth();
-  }, []);
+    checkAuth()
+  }, [])
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, checkAuth }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout, checkAuth }}>
       {children}
     </AuthContext.Provider>
-  );
+  )
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
+  const context = useContext(AuthContext)
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error('useAuth must be used within an AuthProvider')
   }
-  return context;
+  return context
 }

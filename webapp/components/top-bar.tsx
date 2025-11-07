@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/context/auth-context";
 
 const TopBar = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading } = useAuth();
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -38,7 +38,7 @@ const TopBar = () => {
           variant="outline"
           size="sm"
           onClick={handleLogout}
-          disabled={!user}
+          disabled={isLoading || !user}
         >
           Logout
         </Button>
