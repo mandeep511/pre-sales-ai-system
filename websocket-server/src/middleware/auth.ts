@@ -6,15 +6,45 @@ export interface AuthenticatedUser {
   email: string
   name: string
   role: string
+  active?: boolean
 }
 
 export interface AuthRequest extends Request {
   user?: AuthenticatedUser
 }
 
-const fetchUserFromSession = async (req: AuthRequest): Promise<AuthenticatedUser | null> => {
-  const userId = req.session?.userId
+const resolveUserId = (req: AuthRequest): string | null => {
+  if (req.session?.userId) {
+    return req.session.userId
+  }
 
+  const authHeader = req.headers.authorization
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.slice(7).trim()
+    if (token) {
+      return token
+    }
+  }
+
+  return null
+}
+
+const attachUserToRequest = (req: AuthRequest, user: AuthenticatedUser) => {
+  req.user = user
+  if (req.session) {
+    req.session.userId = user.id
+    req.session.user = user
+  }
+}
+
+const fetchUser = async (req: AuthRequest): Promise<AuthenticatedUser | null> => {
+  if (req.session?.user) {
+    const sessionUser = req.session.user as AuthenticatedUser
+    attachUserToRequest(req, sessionUser)
+    return sessionUser
+  }
+
+  const userId = resolveUserId(req)
   if (!userId) {
     return null
   }
@@ -28,16 +58,20 @@ const fetchUserFromSession = async (req: AuthRequest): Promise<AuthenticatedUser
     return null
   }
 
-  req.user = user
+  attachUserToRequest(req, user)
   return user
 }
 
 export const requireAuth = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const user = await fetchUserFromSession(req)
+    const user = await fetchUser(req)
 
     if (!user) {
       return res.status(401).json({ error: 'Unauthorized' })
+    }
+
+    if (typeof user.active === 'boolean' && !user.active) {
+      return res.status(401).json({ error: 'User inactive' })
     }
 
     next()
@@ -49,7 +83,7 @@ export const requireAuth = async (req: AuthRequest, res: Response, next: NextFun
 
 export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    await fetchUserFromSession(req)
+    await fetchUser(req)
   } catch (error) {
     console.error('Optional auth error:', error)
   } finally {

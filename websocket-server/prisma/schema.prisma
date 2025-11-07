@@ -57,26 +57,28 @@ model Campaign {
 
 model Lead {
   id         String   @id @default(cuid())
-  campaignId String
+  campaignId String?
   
   // Contact info
   name       String
-  phone      String
+  phone      String   @unique
   email      String?
   company    String?
   
-  // Lead data (JSON)
+  // Lead data (JSON stored as string)
   metadata   String   @default("{}")
+  tags       String   @default("[]")
   
   // Status tracking
   status     String   @default("new") // new, contacted, qualified, unqualified, failed
+  priority   Int      @default(0)
   attempts   Int      @default(0)
   lastCallAt DateTime?
   
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   
-  campaign     Campaign      @relation(fields: [campaignId], references: [id])
+  campaign     Campaign?    @relation(fields: [campaignId], references: [id])
   callSessions CallSession[]
 }
 

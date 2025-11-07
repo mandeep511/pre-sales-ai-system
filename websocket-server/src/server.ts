@@ -14,6 +14,7 @@ import {
 import functions from './functionHandlers'
 import { requireAuth, optionalAuth, AuthRequest } from './middleware/auth'
 import campaignRoutes from './routes/campaigns'
+import leadRoutes from './routes/leads'
 import authRoutes from './routes/auth'
 
 dotenv.config()
@@ -49,6 +50,7 @@ app.use(
 
 app.use('/api/auth', authRoutes)
 app.use('/api/campaigns', campaignRoutes)
+app.use('/api/leads', leadRoutes)
 
 const server = http.createServer(app)
 const wss = new WebSocketServer({ server })

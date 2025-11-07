@@ -24,6 +24,7 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
       },
       orderBy: { updatedAt: 'desc' },
     })
+
     res.json({ campaigns })
   } catch (error) {
     console.error('Failed to fetch campaigns:', error)
@@ -77,12 +78,10 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
       priority,
     } = req.body
 
-    // Validation
     if (!name || !systemPrompt) {
       return res.status(400).json({ error: 'Name and system prompt are required' })
     }
 
-    // Create campaign
     const campaign = await prisma.campaign.create({
       data: {
         name,
@@ -101,7 +100,6 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
       },
     })
 
-    // Create initial config version
     await prisma.campaignConfigVersion.create({
       data: {
         campaignId: campaign.id,
@@ -122,7 +120,6 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
       },
     })
 
-    // Log activity
     await prisma.activityLog.create({
       data: {
         userId: req.user!.id,
@@ -164,7 +161,6 @@ router.put('/:id', requireAuth, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Campaign not found' })
     }
 
-    // Update campaign
     const campaign = await prisma.campaign.update({
       where: { id },
       data: {
@@ -183,7 +179,6 @@ router.put('/:id', requireAuth, async (req: AuthRequest, res) => {
       },
     })
 
-    // Create new config version if config changed
     const configChanged =
       systemPrompt !== existing.systemPrompt ||
       JSON.stringify(tools) !== existing.tools ||
@@ -216,7 +211,6 @@ router.put('/:id', requireAuth, async (req: AuthRequest, res) => {
       })
     }
 
-    // Log activity
     await prisma.activityLog.create({
       data: {
         userId: req.user!.id,
