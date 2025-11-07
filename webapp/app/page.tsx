@@ -1,5 +1,5 @@
-import CallInterface from "@/components/call-interface";
+import { redirect } from 'next/navigation'
 
-export default function Page() {
-  return <CallInterface />;
+export default function HomePage() {
+  redirect('/dashboard')
 }

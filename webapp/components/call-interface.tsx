@@ -43,49 +43,43 @@ const CallInterface = () => {
   }, [allConfigsReady, ws]);
 
   return (
-    <div className="h-screen bg-white flex flex-col">
+    <div className="flex flex-col gap-4">
       <ChecklistAndConfig
         ready={allConfigsReady}
         setReady={setAllConfigsReady}
         selectedPhoneNumber={selectedPhoneNumber}
         setSelectedPhoneNumber={setSelectedPhoneNumber}
       />
-      <TopBar />
-      <div className="flex-grow p-4 h-full overflow-hidden flex flex-col">
-        <div className="grid grid-cols-12 gap-4 h-full">
-          {/* Left Column */}
-          <div className="col-span-3 flex flex-col h-full overflow-hidden">
-            <SessionConfigurationPanel
-              callStatus={callStatus}
-              onSave={(config) => {
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                  const updateEvent = {
-                    type: "session.update",
-                    session: {
-                      ...config,
-                    },
-                  };
-                  console.log("Sending update event:", updateEvent);
-                  ws.send(JSON.stringify(updateEvent));
-                }
-              }}
-            />
-          </div>
+      <div className="grid grid-cols-12 gap-4 min-h-[600px]">
+        <div className="col-span-3 flex flex-col overflow-hidden">
+          <SessionConfigurationPanel
+            callStatus={callStatus}
+            onSave={(config) => {
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                const updateEvent = {
+                  type: "session.update",
+                  session: {
+                    ...config,
+                  },
+                };
+                console.log("Sending update event:", updateEvent);
+                ws.send(JSON.stringify(updateEvent));
+              }
+            }}
+          />
+        </div>
 
-          {/* Middle Column: Transcript */}
-          <div className="col-span-6 flex flex-col gap-4 h-full overflow-hidden">
-            <PhoneNumberChecklist
-              selectedPhoneNumber={selectedPhoneNumber}
-              allConfigsReady={allConfigsReady}
-              setAllConfigsReady={setAllConfigsReady}
-            />
-            <Transcript items={items} />
-          </div>
+        <div className="col-span-6 flex flex-col gap-4 overflow-hidden">
+          <PhoneNumberChecklist
+            selectedPhoneNumber={selectedPhoneNumber}
+            allConfigsReady={allConfigsReady}
+            setAllConfigsReady={setAllConfigsReady}
+          />
+          <Transcript items={items} />
+        </div>
 
-          {/* Right Column: Function Calls */}
-          <div className="col-span-3 flex flex-col h-full overflow-hidden">
-            <FunctionCallsPanel items={items} ws={ws} />
-          </div>
+        <div className="col-span-3 flex flex-col overflow-hidden">
+          <FunctionCallsPanel items={items} ws={ws} />
         </div>
       </div>
     </div>
