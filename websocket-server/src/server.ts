@@ -16,6 +16,8 @@ import { requireAuth, optionalAuth, AuthRequest } from './middleware/auth'
 import campaignRoutes from './routes/campaigns'
 import leadRoutes from './routes/leads'
 import authRoutes from './routes/auth'
+import queueRoutes from './routes/queue'
+import { queueManager } from './services/queueManager'
 
 dotenv.config()
 
@@ -51,6 +53,7 @@ app.use(
 app.use('/api/auth', authRoutes)
 app.use('/api/campaigns', campaignRoutes)
 app.use('/api/leads', leadRoutes)
+app.use('/api/queue', queueRoutes)
 
 const server = http.createServer(app)
 const wss = new WebSocketServer({ server })
@@ -105,3 +108,5 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)
 })
+
+export { queueManager }

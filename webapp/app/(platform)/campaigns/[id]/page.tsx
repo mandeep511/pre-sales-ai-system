@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Edit, Trash2 } from 'lucide-react'
 import { campaignApi } from '@/lib/api-client'
+import { QueueControls } from '@/components/queue-controls'
 
 export default function CampaignDetailPage() {
   const params = useParams()
@@ -86,6 +87,8 @@ export default function CampaignDetailPage() {
           </CardHeader>
         </Card>
       </div>
+
+      <QueueControls campaignId={campaign.id} />
 
       <Card>
         <CardHeader>
