@@ -1,7 +1,22 @@
 import { RawData, WebSocket } from "ws";
+import twilio from "twilio";
 import functions from "./functionHandlers";
+import { prisma } from "./lib/prisma";
+import { redis } from "./lib/redis";
+import { queueManager } from "./services/queueManager";
 
-interface Session {
+const twilioClient = twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
+
+export interface CallContext {
+  callSessionId: string;
+  leadId: string;
+  campaignId: string;
+}
+
+export interface Session {
   twilioConn?: WebSocket;
   frontendConn?: WebSocket;
   modelConn?: WebSocket;
@@ -11,18 +26,170 @@ interface Session {
   responseStartTimestamp?: number;
   latestMediaTimestamp?: number;
   openAIApiKey?: string;
+  callContext?: CallContext;
+  transcriptItems?: any[];
 }
 
 let session: Session = {};
 
-export function handleCallConnection(ws: WebSocket, openAIApiKey: string) {
+export async function initiateOutboundCall(
+  callSessionId: string,
+  leadId: string,
+  campaignId: string
+): Promise<void> {
+  try {
+    const callSession = await prisma.callSession.findUnique({
+      where: { id: callSessionId },
+      include: {
+        lead: true,
+        campaign: true,
+      },
+    });
+
+    if (!callSession) {
+      throw new Error("Call session not found");
+    }
+
+    const { lead, campaign } = callSession;
+
+    const fromNumber =
+      process.env.TWILIO_FROM_NUMBER || (await getDefaultTwilioNumber());
+
+    await prisma.callSession.update({
+      where: { id: callSessionId },
+      data: {
+        status: "dialing",
+        dialedAt: new Date(),
+        fromNumber,
+        toNumber: lead.phone,
+      },
+    });
+
+    const callContext: CallContext = {
+      callSessionId,
+      leadId,
+      campaignId,
+    };
+
+    await redis.set(
+      `call:context:${callSessionId}`,
+      JSON.stringify(callContext),
+      "EX",
+      3600
+    );
+
+    const call = await twilioClient.calls.create({
+      from: fromNumber,
+      to: lead.phone,
+      url: `${process.env.PUBLIC_URL}/twiml?callSessionId=${callSessionId}`,
+      statusCallback: `${process.env.PUBLIC_URL}/api/call-status`,
+      statusCallbackEvent: ["initiated", "ringing", "answered", "completed"],
+      statusCallbackMethod: "POST",
+    });
+
+    await prisma.callSession.update({
+      where: { id: callSessionId },
+      data: { twilioCallSid: call.sid },
+    });
+
+    console.log(`Outbound call initiated: ${call.sid} for lead ${lead.name}`);
+  } catch (error) {
+    console.error("Failed to initiate outbound call:", error);
+
+    try {
+      await prisma.callSession.update({
+        where: { id: callSessionId },
+        data: {
+          status: "failed",
+          outcome: "failed",
+          endedAt: new Date(),
+        },
+      });
+    } catch (updateError) {
+      console.error(
+        "Failed to mark call session as failed:",
+        (updateError as Error).message
+      );
+    }
+
+    throw error;
+  }
+}
+
+async function getDefaultTwilioNumber(): Promise<string> {
+  const numbers = await twilioClient.incomingPhoneNumbers.list({ limit: 1 });
+  if (numbers.length === 0) {
+    throw new Error("No Twilio phone numbers available");
+  }
+  return numbers[0].phoneNumber;
+}
+
+export function handleCallConnection(
+  ws: WebSocket,
+  openAIApiKey: string,
+  callContext?: CallContext
+) {
   cleanupConnection(session.twilioConn);
   session.twilioConn = ws;
   session.openAIApiKey = openAIApiKey;
+  session.callContext = callContext;
+  session.transcriptItems = [];
 
-  ws.on("message", handleTwilioMessage);
+  ws.on("message", (data: RawData) => {
+    const message = parseMessage(data);
+    if (!message) return;
+
+    handleTwilioMessage(message).catch((error) => {
+      console.error("Error handling Twilio message:", error);
+    });
+  });
   ws.on("error", ws.close);
-  ws.on("close", () => {
+  ws.on("close", async () => {
+    console.log("Twilio connection closed");
+
+    if (session.callContext && session.transcriptItems) {
+      try {
+        await prisma.transcript.create({
+          data: {
+            callSessionId: session.callContext.callSessionId,
+            items: session.transcriptItems,
+          },
+        });
+
+        const callSession = await prisma.callSession.findUnique({
+          where: { id: session.callContext.callSessionId },
+        });
+
+        if (callSession?.answeredAt) {
+          const duration = Math.floor(
+            (Date.now() - callSession.answeredAt.getTime()) / 1000
+          );
+
+          await prisma.callSession.update({
+            where: { id: session.callContext.callSessionId },
+            data: {
+              status: "completed",
+              endedAt: new Date(),
+              duration,
+              outcome: "completed",
+            },
+          });
+
+          await queueManager.handleCallComplete(
+            session.callContext.callSessionId,
+            "completed"
+          );
+        }
+
+        console.log(
+          "Transcript saved for call:",
+          session.callContext.callSessionId
+        );
+      } catch (error) {
+        console.error("Failed to save transcript:", error);
+      }
+    }
+
     cleanupConnection(session.modelConn);
     cleanupConnection(session.twilioConn);
     session.twilioConn = undefined;
@@ -31,6 +198,8 @@ export function handleCallConnection(ws: WebSocket, openAIApiKey: string) {
     session.lastAssistantItem = undefined;
     session.responseStartTimestamp = undefined;
     session.latestMediaTimestamp = undefined;
+    session.callContext = undefined;
+    session.transcriptItems = [];
     if (!session.frontendConn) session = {};
   });
 }
@@ -75,24 +244,39 @@ async function handleFunctionCall(item: { name: string; arguments: string }) {
   }
 }
 
-function handleTwilioMessage(data: RawData) {
-  const msg = parseMessage(data);
-  if (!msg) return;
-
-  switch (msg.event) {
+async function handleTwilioMessage(message: any) {
+  switch (message.event) {
     case "start":
-      session.streamSid = msg.start.streamSid;
+      session.streamSid = message.start.streamSid;
       session.latestMediaTimestamp = 0;
       session.lastAssistantItem = undefined;
       session.responseStartTimestamp = undefined;
+      console.log("Twilio stream started:", session.streamSid);
+
+      if (session.callContext) {
+        await prisma.callSession.update({
+          where: { id: session.callContext.callSessionId },
+          data: {
+            status: "active",
+            answeredAt: new Date(),
+            twilioStreamSid: session.streamSid,
+          },
+        });
+
+        await prisma.lead.update({
+          where: { id: session.callContext.leadId },
+          data: { status: "calling" },
+        });
+      }
+
       tryConnectModel();
       break;
     case "media":
-      session.latestMediaTimestamp = msg.media.timestamp;
+      session.latestMediaTimestamp = message.media.timestamp;
       if (isOpen(session.modelConn)) {
         jsonSend(session.modelConn, {
           type: "input_audio_buffer.append",
-          audio: msg.media.payload,
+          audio: message.media.payload,
         });
       }
       break;
@@ -154,6 +338,15 @@ function tryConnectModel() {
 function handleModelMessage(data: RawData) {
   const event = parseMessage(data);
   if (!event) return;
+
+  if (
+    session.transcriptItems &&
+    ["conversation.item.created", "response.output_item.done"].includes(
+      event.type
+    )
+  ) {
+    session.transcriptItems.push(event);
+  }
 
   jsonSend(session.frontendConn, event);
 
@@ -263,6 +456,8 @@ function closeAllConnections() {
   session.responseStartTimestamp = undefined;
   session.latestMediaTimestamp = undefined;
   session.saved_config = undefined;
+  session.callContext = undefined;
+  session.transcriptItems = [];
 }
 
 function cleanupConnection(ws?: WebSocket) {

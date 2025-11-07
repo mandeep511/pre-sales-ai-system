@@ -1,5 +1,10 @@
 #!/bin/bash
 
+# Resolve paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+SCHEMA_PATH="$PROJECT_ROOT/prisma/schema.prisma"
+
 # Check MongoDB
 echo "Checking MongoDB connection..."
 mongosh --eval "db.runCommand({ ping: 1 })" > /dev/null 2>&1
@@ -18,10 +23,10 @@ fi
 
 # Generate Prisma Client
 echo "Generating Prisma client..."
-npx prisma generate
+npx prisma generate --schema "$SCHEMA_PATH"
 
 # Push schema to database
 echo "Pushing schema to MongoDB..."
-npx prisma db push
+npx prisma db push --schema "$SCHEMA_PATH"
 
 echo "Database setup complete!"

@@ -86,7 +86,17 @@ npm run dev
 
 ### OpenAI & Twilio
 
-Set your credentials in `webapp/.env` and `websocket-server` - see `webapp/.env.example` and `websocket-server.env.example` for reference.
+Set your credentials in `webapp/.env` and `websocket-server/.env`. See `webapp/.env.example` for webapp defaults and refer to the database notes below for configuring MongoDB.
+
+#### Database
+
+The websocket server now uses MongoDB. Set `DATABASE_URL` in `websocket-server/.env` to a valid MongoDB connection string, for example:
+
+```
+mongodb://localhost:27017/pre-sales-ai-websocket
+```
+
+For hosted clusters (Atlas, DocumentDB, etc.), supply the corresponding connection URI.
 
 ### Ngrok
 

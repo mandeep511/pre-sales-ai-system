@@ -6,12 +6,12 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id        String   @id @default(cuid())
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
   email     String   @unique
   name      String
   password  String
@@ -25,7 +25,7 @@ model User {
 }
 
 model Campaign {
-  id          String   @id @default(cuid())
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
   name        String
   description String?
   status      String   @default("draft") // draft, active, paused, archived
@@ -47,7 +47,7 @@ model Campaign {
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  createdById String
+  createdById String   @db.ObjectId
   
   createdBy      User                      @relation(fields: [createdById], references: [id])
   leads          Lead[]
@@ -56,8 +56,8 @@ model Campaign {
 }
 
 model Lead {
-  id         String   @id @default(cuid())
-  campaignId String?
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  campaignId String?  @db.ObjectId
   
   // Contact info
   name       String
@@ -83,9 +83,9 @@ model Lead {
 }
 
 model CallSession {
-  id         String   @id @default(cuid())
-  campaignId String
-  leadId     String
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  campaignId String   @db.ObjectId
+  leadId     String   @db.ObjectId
   
   // Call details
   status     String   @default("pending") // pending, in_progress, completed, failed
@@ -111,9 +111,9 @@ model CallSession {
 }
 
 model CampaignConfigVersion {
-  id         String   @id @default(cuid())
-  campaignId String
-  version    Int
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  campaignId  String   @db.ObjectId
+  version     Int
   
   // Config snapshot (JSON)
   snapshot   String
@@ -121,7 +121,7 @@ model CampaignConfigVersion {
   // Metadata
   changes    String?
   createdAt  DateTime @default(now())
-  createdById String
+  createdById String  @db.ObjectId
   
   campaign  Campaign @relation(fields: [campaignId], references: [id])
   createdBy User     @relation(fields: [createdById], references: [id])
@@ -130,8 +130,8 @@ model CampaignConfigVersion {
 }
 
 model ActivityLog {
-  id         String   @id @default(cuid())
-  userId     String
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String   @db.ObjectId
   action     String
   entityType String
   entityId   String

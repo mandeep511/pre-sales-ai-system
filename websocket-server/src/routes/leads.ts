@@ -263,7 +263,7 @@ router.post('/bulk/tags', requireAuth, async (req: AuthRequest, res) => {
       select: { id: true, tags: true },
     })
 
-    const updates = leads.map((lead) => {
+    const updates = leads.map((lead: { tags: string | null | undefined; id: any }) => {
       const currentTags = parseJson<string[]>(lead.tags, [])
       let newTags = [...currentTags]
 

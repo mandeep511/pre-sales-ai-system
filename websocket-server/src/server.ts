@@ -10,6 +10,8 @@ import session from 'express-session'
 import {
   handleCallConnection,
   handleFrontendConnection,
+  initiateOutboundCall,
+  CallContext,
 } from './sessionManager'
 import functions from './functionHandlers'
 import { requireAuth, optionalAuth, AuthRequest } from './middleware/auth'
@@ -17,7 +19,10 @@ import campaignRoutes from './routes/campaigns'
 import leadRoutes from './routes/leads'
 import authRoutes from './routes/auth'
 import queueRoutes from './routes/queue'
+import callRoutes from './routes/calls'
 import { queueManager } from './services/queueManager'
+import { redis } from './lib/redis'
+import { prisma } from './lib/prisma'
 
 dotenv.config()
 
@@ -54,24 +59,29 @@ app.use('/api/auth', authRoutes)
 app.use('/api/campaigns', campaignRoutes)
 app.use('/api/leads', leadRoutes)
 app.use('/api/queue', queueRoutes)
+app.use('/api/calls', callRoutes)
 
 const server = http.createServer(app)
 const wss = new WebSocketServer({ server })
-
 const twimlPath = join(__dirname, 'twiml.xml')
-const twimlTemplate = readFileSync(twimlPath, 'utf-8')
 
 app.get('/public-url', optionalAuth, (req, res) => {
   res.json({ publicUrl: PUBLIC_URL })
 })
 
-app.all('/twiml', optionalAuth, (req, res) => {
-  const wsUrl = new URL(PUBLIC_URL)
-  wsUrl.protocol = 'wss:'
-  wsUrl.pathname = '/call'
+app.get('/twiml', async (req, res) => {
+  const { callSessionId } = req.query as { callSessionId?: string }
 
-  const twimlContent = twimlTemplate.replace('{{WS_URL}}', wsUrl.toString())
-  res.type('text/xml').send(twimlContent)
+  let twimlTemplate = readFileSync(twimlPath, 'utf-8')
+
+  const wsHost = req.get('host')
+  const wsUrl = `wss://${wsHost}/call${
+    callSessionId ? `?callSessionId=${callSessionId}` : ''
+  }`
+
+  twimlTemplate = twimlTemplate.replace('{{WS_URL}}', wsUrl)
+  res.type('text/xml')
+  res.send(twimlTemplate)
 })
 
 app.get('/tools', requireAuth, (req: AuthRequest, res) => {
@@ -81,7 +91,7 @@ app.get('/tools', requireAuth, (req: AuthRequest, res) => {
 let currentCall: WebSocket | null = null
 let currentLogs: WebSocket | null = null
 
-wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
+wss.on('connection', async (ws: WebSocket, req: IncomingMessage) => {
   const url = new URL(req.url || '', `http://${req.headers.host}`)
   const parts = url.pathname.split('/').filter(Boolean)
 
@@ -95,7 +105,24 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
   if (type === 'call') {
     if (currentCall) currentCall.close()
     currentCall = ws
-    handleCallConnection(currentCall, OPENAI_API_KEY)
+
+    const callUrl = new URL(req.url || '', `ws://${req.headers.host}`)
+    const callSessionId = callUrl.searchParams.get('callSessionId')
+
+    let callContext: CallContext | undefined
+
+    if (callSessionId) {
+      try {
+        const cached = await redis.get(`call:context:${callSessionId}`)
+        if (cached) {
+          callContext = JSON.parse(cached) as CallContext
+        }
+      } catch (error) {
+        console.error('Failed to load call context:', error)
+      }
+    }
+
+    handleCallConnection(currentCall, OPENAI_API_KEY, callContext)
   } else if (type === 'logs') {
     if (currentLogs) currentLogs.close()
     currentLogs = ws
@@ -104,6 +131,71 @@ wss.on('connection', (ws: WebSocket, req: IncomingMessage) => {
     ws.close()
   }
 })
+
+app.post('/api/call-status', express.json(), async (req, res) => {
+  const { CallSid, CallStatus } = req.body
+
+  console.log(`Call ${CallSid} status: ${CallStatus}`)
+
+  try {
+    const callSession = await prisma.callSession.findUnique({
+      where: { twilioCallSid: CallSid },
+    })
+
+    if (!callSession) {
+      return res.sendStatus(200)
+    }
+
+    const statusMap: Record<string, string> = {
+      initiated: 'dialing',
+      ringing: 'ringing',
+      'in-progress': 'active',
+      completed: 'completed',
+      busy: 'no_answer',
+      failed: 'failed',
+      'no-answer': 'no_answer',
+    }
+
+    const newStatus = statusMap[CallStatus] || CallStatus
+
+    await prisma.callSession.update({
+      where: { id: callSession.id },
+      data: { status: newStatus },
+    })
+
+    if (['busy', 'failed', 'no-answer'].includes(CallStatus)) {
+      await prisma.callSession.update({
+        where: { id: callSession.id },
+        data: {
+          outcome: statusMap[CallStatus],
+          endedAt: new Date(),
+        },
+      })
+
+      await queueManager.handleCallComplete(
+        callSession.id,
+        statusMap[CallStatus]
+      )
+    }
+
+    res.sendStatus(200)
+  } catch (error) {
+    console.error('Error handling call status:', error)
+    res.sendStatus(500)
+  }
+})
+
+queueManager.on('call:ready', async (data: any) => {
+  const { callSessionId, leadId, campaignId } = data
+
+  try {
+    await initiateOutboundCall(callSessionId, leadId, campaignId)
+  } catch (error) {
+    console.error('Failed to initiate call from queue:', error)
+  }
+})
+
+console.log('Queue manager connected to call system')
 
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`)
