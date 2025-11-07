@@ -11,6 +11,8 @@ import {
   handleFrontendConnection,
 } from "./sessionManager";
 import functions from "./functionHandlers";
+import leadRoutes from "./routes/leads";
+import campaignRoutes from "./routes/campaigns";
 
 dotenv.config();
 
@@ -28,6 +30,7 @@ app.use(cors());
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
+app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
 const twimlPath = join(__dirname, "twiml.xml");
@@ -50,6 +53,10 @@ app.all("/twiml", (req, res) => {
 app.get("/tools", (req, res) => {
   res.json(functions.map((f) => f.schema));
 });
+
+// Mount API routes
+app.use("/api/leads", leadRoutes);
+app.use("/api/campaigns", campaignRoutes);
 
 let currentCall: WebSocket | null = null;
 let currentLogs: WebSocket | null = null;
