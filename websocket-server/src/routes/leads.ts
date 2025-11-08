@@ -1,27 +1,29 @@
 import { Router } from 'express'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { requireAuth, AuthRequest } from '../middleware/auth'
+import {
+  parseJson,
+  stringifyJson,
+  toObjectId,
+  toObjectIdArray,
+  coerceDate,
+  withTransactionFallback,
+  createDateFieldNormalizer,
+  withDateNormalization,
+} from '../lib/mongo-utils'
+import { recordActivity } from '../lib/activity-log'
 
 const router = Router()
 
-const parseJson = <T>(value: string | null | undefined, fallback: T): T => {
-  if (!value) return fallback
-  try {
-    return JSON.parse(value) as T
-  } catch (error) {
-    console.error('Failed to parse JSON field', error)
-    return fallback
-  }
-}
+const ensureLeadDatesNormalized = createDateFieldNormalizer(prisma, 'Lead', [
+  { path: 'createdAt' },
+  { path: 'updatedAt' },
+  { path: 'lastCalledAt', nullable: true },
+])
 
-const stringifyJson = (value: any, fallback: any): string => {
-  try {
-    return JSON.stringify(value ?? fallback)
-  } catch (error) {
-    console.error('Failed to stringify JSON field', error)
-    return JSON.stringify(fallback)
-  }
-}
+const runLeadOperation = <T>(operation: () => Promise<T>) =>
+  withDateNormalization(operation, ensureLeadDatesNormalized)
 
 const normalizeLead = (lead: any) => ({
   ...lead,
@@ -29,8 +31,50 @@ const normalizeLead = (lead: any) => ({
   tags: parseJson(lead.tags, [] as string[]),
 })
 
+const safeCreateLead = async (data: Prisma.LeadUncheckedCreateInput) =>
+  withTransactionFallback(
+    () => runLeadOperation(() => prisma.lead.create({ data })),
+    async () => {
+      const now = new Date()
+      const document = {
+        name: data.name,
+        phone: data.phone,
+        email: data.email ?? null,
+        company: data.company ?? null,
+        metadata: data.metadata ?? '{}',
+        tags: data.tags ?? '[]',
+        status: data.status ?? 'new',
+        campaignId: toObjectId(data.campaignId ?? null),
+        priority: data.priority ?? 0,
+        attempts: (data as any).attempts ?? 0,
+        lastCalledAt: coerceDate((data as any).lastCalledAt ?? null),
+        createdAt: coerceDate(data.createdAt ?? null, now) ?? now,
+        updatedAt: coerceDate(data.updatedAt ?? null, now) ?? now,
+      }
+
+      await prisma.$runCommandRaw({
+        insert: 'Lead',
+        documents: [document],
+      })
+
+      const created = await runLeadOperation(() =>
+        prisma.lead.findUnique({
+          where: { phone: data.phone },
+        })
+      )
+
+      if (!created) {
+        throw new Error('Failed to insert lead without transaction')
+      }
+
+      return created
+    }
+  )
+
 router.get('/', requireAuth, async (req: AuthRequest, res) => {
   try {
+    await ensureLeadDatesNormalized()
+
     const {
       status,
       campaignId,
@@ -80,18 +124,20 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
     const skip = (pageNum - 1) * limitNum
 
     const [leads, total] = await Promise.all([
-      prisma.lead.findMany({
-        where: filters,
-        include: {
-          campaign: {
-            select: { id: true, name: true },
+      runLeadOperation(() =>
+        prisma.lead.findMany({
+          where: filters,
+          include: {
+            campaign: {
+              select: { id: true, name: true },
+            },
           },
-        },
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: limitNum,
-      }),
-      prisma.lead.count({ where: filters }),
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limitNum,
+        })
+      ),
+      runLeadOperation(() => prisma.lead.count({ where: filters })),
     ])
 
     res.json({
@@ -111,18 +157,20 @@ router.get('/', requireAuth, async (req: AuthRequest, res) => {
 
 router.get('/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
-    const lead = await prisma.lead.findUnique({
-      where: { id: req.params.id },
-      include: {
-        campaign: {
-          select: { id: true, name: true },
+    const lead = await runLeadOperation(() =>
+      prisma.lead.findUnique({
+        where: { id: req.params.id },
+        include: {
+          campaign: {
+            select: { id: true, name: true },
+          },
+          callSessions: {
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+          },
         },
-        callSessions: {
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        },
-      },
-    })
+      })
+    )
 
     if (!lead) {
       return res.status(404).json({ error: 'Lead not found' })
@@ -152,36 +200,34 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Name and phone are required' })
     }
 
-    const existing = await prisma.lead.findUnique({
-      where: { phone },
-    })
+    const existing = await runLeadOperation(() =>
+      prisma.lead.findUnique({
+        where: { phone },
+      })
+    )
 
     if (existing) {
       return res.status(409).json({ error: 'Lead with this phone number already exists' })
     }
 
-    const lead = await prisma.lead.create({
-      data: {
-        name,
-        phone,
-        email,
-        company,
-        metadata: stringifyJson(metadata, {}),
-        tags: stringifyJson(tags, []),
-        campaignId,
-        priority: priority ?? 0,
-        status: 'new',
-      },
+    const lead = await safeCreateLead({
+      name,
+      phone,
+      email,
+      company,
+      metadata: stringifyJson(metadata, {}),
+      tags: stringifyJson(tags, []),
+      campaignId: campaignId || undefined,
+      priority: priority ?? 0,
+      status: 'new',
     })
 
-    await prisma.activityLog.create({
-      data: {
-        userId: req.user!.id,
-        action: 'lead_created',
-        entityType: 'Lead',
-        entityId: lead.id,
-        details: JSON.stringify({ name: lead.name, phone: lead.phone }),
-      },
+    await recordActivity({
+      userId: req.user!.id,
+      action: 'lead_created',
+      entityType: 'Lead',
+      entityId: lead.id,
+      details: JSON.stringify({ name: lead.name, phone: lead.phone }),
     })
 
     res.status(201).json({ lead: normalizeLead(lead) })
@@ -207,40 +253,42 @@ router.put('/:id', requireAuth, async (req: AuthRequest, res) => {
     } = req.body
 
     if (phone) {
-      const existing = await prisma.lead.findFirst({
-        where: {
-          phone,
-          id: { not: id },
-        },
-      })
+      const existing = await runLeadOperation(() =>
+        prisma.lead.findFirst({
+          where: {
+            phone,
+            id: { not: id },
+          },
+        })
+      )
       if (existing) {
         return res.status(409).json({ error: 'Another lead with this phone number exists' })
       }
     }
 
-    const lead = await prisma.lead.update({
-      where: { id },
-      data: {
-        name,
-        phone,
-        email,
-        company,
-        metadata: metadata !== undefined ? stringifyJson(metadata, {}) : undefined,
-        tags: tags !== undefined ? stringifyJson(tags, []) : undefined,
-        campaignId,
-        priority,
-        status,
-      },
-    })
+    const lead = await runLeadOperation(() =>
+      prisma.lead.update({
+        where: { id },
+        data: {
+          name,
+          phone,
+          email,
+          company,
+          metadata: metadata !== undefined ? stringifyJson(metadata, {}) : undefined,
+          tags: tags !== undefined ? stringifyJson(tags, []) : undefined,
+          campaignId,
+          priority,
+          status,
+        },
+      })
+    )
 
-    await prisma.activityLog.create({
-      data: {
-        userId: req.user!.id,
-        action: 'lead_updated',
-        entityType: 'Lead',
-        entityId: id,
-        details: JSON.stringify({ name: lead.name }),
-      },
+    await recordActivity({
+      userId: req.user!.id,
+      action: 'lead_updated',
+      entityType: 'Lead',
+      entityId: id,
+      details: JSON.stringify({ name: lead.name }),
     })
 
     res.json({ lead: normalizeLead(lead) })
@@ -258,10 +306,12 @@ router.post('/bulk/tags', requireAuth, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'leadIds array required' })
     }
 
-    const leads = await prisma.lead.findMany({
-      where: { id: { in: leadIds } },
-      select: { id: true, tags: true },
-    })
+    const leads = await runLeadOperation(() =>
+      prisma.lead.findMany({
+        where: { id: { in: leadIds } },
+        select: { id: true, tags: true },
+      })
+    )
 
     const updates = leads.map((lead: { tags: string | null | undefined; id: any }) => {
       const currentTags = parseJson<string[]>(lead.tags, [])
@@ -275,21 +325,21 @@ router.post('/bulk/tags', requireAuth, async (req: AuthRequest, res) => {
         newTags = newTags.filter((tag) => !removeTags.includes(tag))
       }
 
-      return prisma.lead.update({
-        where: { id: lead.id },
-        data: { tags: stringifyJson(newTags, []) },
-      })
+      return runLeadOperation(() =>
+        prisma.lead.update({
+          where: { id: lead.id },
+          data: { tags: stringifyJson(newTags, []) },
+        })
+      )
     })
 
     await Promise.all(updates)
 
-    await prisma.activityLog.create({
-      data: {
-        userId: req.user!.id,
-        action: 'leads_bulk_tags_updated',
-        entityType: 'Lead',
-        details: JSON.stringify({ count: leadIds.length, addTags, removeTags }),
-      },
+    await recordActivity({
+      userId: req.user!.id,
+      action: 'leads_bulk_tags_updated',
+      entityType: 'Lead',
+      details: JSON.stringify({ count: leadIds.length, addTags, removeTags }),
     })
 
     res.json({ success: true, updated: leadIds.length })
@@ -307,18 +357,62 @@ router.post('/bulk/assign-campaign', requireAuth, async (req: AuthRequest, res) 
       return res.status(400).json({ error: 'leadIds array required' })
     }
 
-    await prisma.lead.updateMany({
-      where: { id: { in: leadIds } },
-      data: { campaignId },
-    })
+    await withTransactionFallback(
+      () =>
+        runLeadOperation(() =>
+          prisma.lead.updateMany({
+            where: { id: { in: leadIds } },
+            data: { campaignId },
+          })
+        ),
+      async () => {
+        await ensureLeadDatesNormalized()
 
-    await prisma.activityLog.create({
-      data: {
-        userId: req.user!.id,
-        action: 'leads_bulk_campaign_assigned',
-        entityType: 'Lead',
-        details: JSON.stringify({ count: leadIds.length, campaignId }),
-      },
+        const ids = toObjectIdArray(leadIds)
+        if (!ids.length) {
+          return { count: 0 }
+        }
+
+        const campaignObjectId = toObjectId(campaignId ?? null)
+        const updateDocument: Record<string, unknown> = {
+          $set: { campaignId: campaignObjectId ?? null },
+        }
+
+        const command = {
+          update: 'Lead',
+          updates: [
+            {
+              q: { _id: { $in: ids } },
+              u: updateDocument,
+              multi: true,
+            },
+          ],
+        } as unknown as Prisma.JsonObject
+
+        const result = (await prisma.$runCommandRaw(command)) as {
+          nModified?: number
+          modifiedCount?: number
+          n?: number
+        }
+
+        const count =
+          typeof result.modifiedCount === 'number'
+            ? result.modifiedCount
+            : typeof result.nModified === 'number'
+              ? result.nModified
+              : typeof result.n === 'number'
+                ? result.n
+                : ids.length
+
+        return { count } as Prisma.BatchPayload
+      }
+    )
+
+    await recordActivity({
+      userId: req.user!.id,
+      action: 'leads_bulk_campaign_assigned',
+      entityType: 'Lead',
+      details: JSON.stringify({ count: leadIds.length, campaignId }),
     })
 
     res.json({ success: true, updated: leadIds.length })
@@ -354,27 +448,27 @@ router.post('/import', requireAuth, async (req: AuthRequest, res) => {
           continue
         }
 
-        const existing = await prisma.lead.findUnique({
-          where: { phone: leadData.phone },
-        })
+        const existing = await runLeadOperation(() =>
+          prisma.lead.findUnique({
+            where: { phone: leadData.phone },
+          })
+        )
 
         if (existing) {
           results.duplicates++
           continue
         }
 
-        await prisma.lead.create({
-          data: {
-            name: leadData.name,
-            phone: leadData.phone,
-            email: leadData.email || null,
-            company: leadData.company || null,
-            metadata: stringifyJson(leadData.metadata, {}),
-            tags: stringifyJson(leadData.tags, []),
-            campaignId: campaignId || null,
-            priority: leadData.priority ?? 0,
-            status: 'new',
-          },
+        await safeCreateLead({
+          name: leadData.name,
+          phone: leadData.phone,
+          email: leadData.email || null,
+          company: leadData.company || null,
+          metadata: stringifyJson(leadData.metadata, {}),
+          tags: stringifyJson(leadData.tags, []),
+          campaignId: campaignId || undefined,
+          priority: leadData.priority ?? 0,
+          status: 'new',
         })
 
         results.success++
@@ -387,18 +481,16 @@ router.post('/import', requireAuth, async (req: AuthRequest, res) => {
       }
     }
 
-    await prisma.activityLog.create({
-      data: {
-        userId: req.user!.id,
-        action: 'leads_imported',
-        entityType: 'Lead',
-        details: JSON.stringify({
-          success: results.success,
-          failed: results.failed,
-          duplicates: results.duplicates,
-          campaignId,
-        }),
-      },
+    await recordActivity({
+      userId: req.user!.id,
+      action: 'leads_imported',
+      entityType: 'Lead',
+      details: JSON.stringify({
+        success: results.success,
+        failed: results.failed,
+        duplicates: results.duplicates,
+        campaignId,
+      }),
     })
 
     res.json({ results })
@@ -412,19 +504,19 @@ router.delete('/:id', requireAuth, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
 
-    const lead = await prisma.lead.update({
-      where: { id },
-      data: { status: 'archived' },
-    })
+    const lead = await runLeadOperation(() =>
+      prisma.lead.update({
+        where: { id },
+        data: { status: 'archived' },
+      })
+    )
 
-    await prisma.activityLog.create({
-      data: {
-        userId: req.user!.id,
-        action: 'lead_archived',
-        entityType: 'Lead',
-        entityId: id,
-        details: JSON.stringify({ name: lead.name }),
-      },
+    await recordActivity({
+      userId: req.user!.id,
+      action: 'lead_archived',
+      entityType: 'Lead',
+      entityId: id,
+      details: JSON.stringify({ name: lead.name }),
     })
 
     res.json({ success: true })

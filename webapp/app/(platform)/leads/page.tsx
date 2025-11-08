@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -10,20 +11,24 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
-import { Upload, Search, Tag, Mail } from 'lucide-react'
+import { Upload, Search, Tag, Mail, UserPlus } from 'lucide-react'
 import { leadApi, campaignApi } from '@/lib/api-client'
+import { LeadFormDialog } from '@/components/lead-form-dialog'
+
+const ALL_STATUS_VALUE = 'all'
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<any[]>([])
   const [campaigns, setCampaigns] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState(ALL_STATUS_VALUE)
   const [selectedLeads, setSelectedLeads] = useState<string[]>([])
   const [showTagDialog, setShowTagDialog] = useState(false)
   const [showCampaignDialog, setShowCampaignDialog] = useState(false)
   const [newTags, setNewTags] = useState('')
   const [selectedCampaign, setSelectedCampaign] = useState('')
+  const [showAddLeadDialog, setShowAddLeadDialog] = useState(false)
 
   useEffect(() => {
     loadLeads()
@@ -32,10 +37,17 @@ export default function LeadsPage() {
 
   const loadLeads = async () => {
     try {
-      const data = await leadApi.list({ search, status: statusFilter })
+      const normalizedStatus =
+        statusFilter === ALL_STATUS_VALUE ? undefined : statusFilter
+
+      const data = await leadApi.list({
+        search,
+        status: normalizedStatus,
+      })
       setLeads(data.leads)
     } catch (err) {
       console.error(err)
+      toast.error('Failed to load leads. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -47,6 +59,7 @@ export default function LeadsPage() {
       setCampaigns(data)
     } catch (err) {
       console.error(err)
+      toast.error('Failed to load campaigns.')
     }
   }
 
@@ -63,7 +76,10 @@ export default function LeadsPage() {
   }
 
   const handleAddTags = async () => {
-    if (!newTags.trim()) return
+    if (!newTags.trim()) {
+      toast.error('Add at least one tag.')
+      return
+    }
     
     try {
       const tags = newTags.split(',').map((t) => t.trim()).filter(Boolean)
@@ -72,13 +88,18 @@ export default function LeadsPage() {
       setNewTags('')
       setSelectedLeads([])
       loadLeads()
+      toast.success('Tags updated.')
     } catch (err: any) {
-      alert(err.message)
+      console.error(err)
+      toast.error(err?.message ?? 'Failed to update tags.')
     }
   }
 
   const handleAssignCampaign = async () => {
-    if (!selectedCampaign) return
+    if (!selectedCampaign) {
+      toast.error('Select a campaign first.')
+      return
+    }
     
     try {
       await leadApi.bulkAssignCampaign(selectedLeads, selectedCampaign)
@@ -86,8 +107,10 @@ export default function LeadsPage() {
       setSelectedCampaign('')
       setSelectedLeads([])
       loadLeads()
+      toast.success('Campaign assigned.')
     } catch (err: any) {
-      alert(err.message)
+      console.error(err)
+      toast.error(err?.message ?? 'Failed to assign campaign.')
     }
   }
 
@@ -99,6 +122,10 @@ export default function LeadsPage() {
           <p className="text-muted-foreground">Manage your contact database</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowAddLeadDialog(true)}>
+            <UserPlus className="h-4 w-4 mr-2" />
+            Add Lead
+          </Button>
           <Button variant="outline" asChild>
             <Link href="/leads/import">
               <Upload className="h-4 w-4 mr-2" />
@@ -124,7 +151,7 @@ export default function LeadsPage() {
               <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All statuses</SelectItem>
+              <SelectItem value={ALL_STATUS_VALUE}>All statuses</SelectItem>
               <SelectItem value="new">New</SelectItem>
               <SelectItem value="queued">Queued</SelectItem>
               <SelectItem value="calling">Calling</SelectItem>
@@ -285,6 +312,16 @@ export default function LeadsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <LeadFormDialog
+        open={showAddLeadDialog}
+        onOpenChange={setShowAddLeadDialog}
+        campaignOptions={campaigns.map((campaign: any) => ({ id: campaign.id, name: campaign.name }))}
+        onSuccess={() => {
+          setLoading(true)
+          loadLeads()
+        }}
+      />
     </div>
   )
 }

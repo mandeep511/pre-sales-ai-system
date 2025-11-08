@@ -16,6 +16,7 @@ model User {
   name      String
   password  String
   role      String   @default("user")
+  active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -36,8 +37,8 @@ model Campaign {
   voice        String   @default("alloy")
   
   // Dynamic configuration (JSON)
-  postCallForm String   @default("[]")
-  tools        String   @default("[]")
+  postCallForm Json?
+  tools        Json?
   
   // Queue settings
   batchSize   Int      @default(10)
@@ -53,6 +54,7 @@ model Campaign {
   leads          Lead[]
   callSessions   CallSession[]
   configVersions CampaignConfigVersion[]
+  queueState     QueueState?
 }
 
 model Lead {
@@ -73,7 +75,7 @@ model Lead {
   status     String   @default("new") // new, contacted, qualified, unqualified, failed
   priority   Int      @default(0)
   attempts   Int      @default(0)
-  lastCallAt DateTime?
+  lastCalledAt DateTime?
   
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -86,6 +88,7 @@ model CallSession {
   id         String   @id @default(auto()) @map("_id") @db.ObjectId
   campaignId String   @db.ObjectId
   leadId     String   @db.ObjectId
+  direction  String?
   
   // Call details
   status     String   @default("pending") // pending, in_progress, completed, failed
@@ -94,20 +97,42 @@ model CallSession {
   duration   Int?
   
   // Results
-  transcript String?
   summary    String?
   outcome    String?
+  configSnapshot Json?
   formData   String?
   
   // Technical
-  callSid    String?
-  error      String?
+  twilioCallSid   String?  @unique
+  twilioStreamSid String?
+  fromNumber      String?
+  toNumber        String?
+  queuedAt        DateTime @default(now())
+  dialedAt        DateTime?
+  answeredAt      DateTime?
+  error           String?
   
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   
   campaign Campaign @relation(fields: [campaignId], references: [id])
   lead     Lead     @relation(fields: [leadId], references: [id])
+  transcript Transcript?
+  recording  Recording?
+}
+
+model QueueState {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  campaignId      String   @unique @db.ObjectId
+  campaign        Campaign @relation(fields: [campaignId], references: [id])
+  status          String   @default("idle")
+  currentBatch    Json?
+  batchStartedAt  DateTime?
+  nextScheduledAt DateTime?
+  totalQueued     Int      @default(0)
+  totalCompleted  Int      @default(0)
+  totalFailed     Int      @default(0)
+  updatedAt       DateTime @updatedAt
 }
 
 model CampaignConfigVersion {
@@ -129,12 +154,31 @@ model CampaignConfigVersion {
   @@unique([campaignId, version])
 }
 
+model Transcript {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  callSessionId String      @unique @db.ObjectId
+  callSession   CallSession @relation(fields: [callSessionId], references: [id])
+  items         Json
+  toolCalls     Json?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model Recording {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  callSessionId String      @unique @db.ObjectId
+  callSession   CallSession @relation(fields: [callSessionId], references: [id])
+  audioUrl      String?
+  format        String?
+  createdAt     DateTime    @default(now())
+}
+
 model ActivityLog {
   id         String   @id @default(auto()) @map("_id") @db.ObjectId
   userId     String   @db.ObjectId
   action     String
   entityType String
-  entityId   String
+  entityId   String?  @db.ObjectId
   details    String?
   createdAt  DateTime @default(now())
   

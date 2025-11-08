@@ -1,0 +1,5 @@
+---
+description: Enforces a consistent naming convention for directories across the project.
+globs: **/*
+---
+- Use kebab-case for directories (components/auth-wizard)

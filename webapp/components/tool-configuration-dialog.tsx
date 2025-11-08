@@ -51,12 +51,24 @@ export const ToolConfigurationDialog: React.FC<
     source: "local",
   }));
 
-  const backendTemplateOptions = backendTools.map((t: any) => ({
-    ...t,
-    source: "backend",
-  }));
+  const backendTemplateOptions = Array.isArray(backendTools)
+    ? backendTools.map((t: any) => ({
+        ...t,
+        source: "backend",
+      }))
+    : [];
 
-  const allTemplates = [...localTemplateOptions, ...backendTemplateOptions];
+  const templateHasName = (
+    template: any
+  ): template is { name: string; source?: string } =>
+    typeof template?.name === "string" && template.name.trim().length > 0;
+
+  const allTemplates = [...localTemplateOptions, ...backendTemplateOptions]
+    .filter(templateHasName)
+    .map((template) => ({
+      ...template,
+      name: template.name.trim(),
+    }));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

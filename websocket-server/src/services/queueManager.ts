@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { redis } from '../lib/redis'
 
@@ -26,19 +27,37 @@ class QueueManager extends EventEmitter {
 
     console.log(`Starting queue for campaign ${campaignId}`)
 
-    const queueState = await prisma.queueState.upsert({
+    let queueState = await prisma.queueState.findUnique({
       where: { campaignId },
-      create: {
-        campaignId,
-        status: 'running',
-        totalQueued: 0,
-        totalCompleted: 0,
-        totalFailed: 0,
-      },
-      update: {
-        status: 'running',
-      },
     })
+
+    if (queueState) {
+      queueState = await prisma.queueState.update({
+        where: { campaignId },
+        data: { status: 'running' },
+      })
+    } else {
+      try {
+        queueState = await prisma.queueState.create({
+          data: {
+            campaignId,
+            status: 'running',
+            totalQueued: 0,
+            totalCompleted: 0,
+            totalFailed: 0,
+          },
+        })
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          queueState = await prisma.queueState.update({
+            where: { campaignId },
+            data: { status: 'running' },
+          })
+        } else {
+          throw error
+        }
+      }
+    }
 
     await this.cacheQueueState(campaignId, queueState)
 

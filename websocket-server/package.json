@@ -6,7 +6,15 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
-    "dev": "nodemon --watch 'src/**/*' --watch '.env' --ext 'ts,js,xml,env' --exec 'ts-node' src/server.ts",
+    "dev": "nodemon --watch \"src/**/*\" --watch \".env\" --ext \"ts,js,xml,env\" --exec ts-node src/server.ts",
+    "db:seed": "ts-node prisma/seed.ts",
+    "prisma": "prisma",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:db-push": "prisma db push",
+    "prisma:studio": "prisma studio",
+    "prisma:seed": "ts-node prisma/seed.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -19,12 +27,17 @@
     "@types/ws": "^8.5.12",
     "bcrypt": "^5.1.1",
     "connect-mongo": "^5.1.0",
+    "connect-redis": "^9.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.2.1",
     "express-session": "^1.18.2",
+    "helmet": "^8.1.0",
     "httpdispatcher": "^2.2.0",
     "ioredis": "^5.3.2",
+    "mongodb": "^6.9.0",
+    "twilio": "^5.10.4",
     "typescript": "^5.5.4",
     "ws": "^8.18.0"
   },
@@ -36,5 +49,8 @@
     "nodemon": "^2.0.22",
     "prisma": "^6.19.0",
     "ts-node": "^10.9.2"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   }
 }

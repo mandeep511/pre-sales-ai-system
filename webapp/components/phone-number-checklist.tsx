@@ -5,24 +5,16 @@ import React, { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { CheckCircle, Circle, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useCallReadiness } from "@/app/context/call-readiness-context";
 
-type PhoneNumberChecklistProps = {
-  selectedPhoneNumber: string;
-  allConfigsReady: boolean;
-  setAllConfigsReady: (ready: boolean) => void;
-};
-
-const PhoneNumberChecklist: React.FC<PhoneNumberChecklistProps> = ({
-  selectedPhoneNumber,
-  allConfigsReady,
-  setAllConfigsReady,
-}) => {
+function PhoneNumberChecklist() {
   const [isVisible, setIsVisible] = useState(true);
+  const { selectedPhoneNumber, isReady, openDialog } = useCallReadiness();
 
   return (
     <Card className="flex items-center justify-between p-4">
       <div className="flex flex-col">
-        <span className="text-sm text-gray-500">Number</span>
+        <span className="text-sm text-muted-foreground">Number</span>
         <div className="flex items-center">
           <span className="font-medium w-36">
             {isVisible ? selectedPhoneNumber || "None" : "••••••••••"}
@@ -30,7 +22,7 @@ const PhoneNumberChecklist: React.FC<PhoneNumberChecklistProps> = ({
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setIsVisible(!isVisible)}
+            onClick={() => setIsVisible((prev) => !prev)}
             className="h-8 w-8"
           >
             {isVisible ? (
@@ -43,25 +35,21 @@ const PhoneNumberChecklist: React.FC<PhoneNumberChecklistProps> = ({
       </div>
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          {allConfigsReady ? (
+          {isReady ? (
             <CheckCircle className="text-green-500 w-4 h-4" />
           ) : (
             <Circle className="text-gray-400 w-4 h-4" />
           )}
           <span className="text-sm text-gray-700">
-            {allConfigsReady ? "Setup Ready" : "Setup Not Ready"}
+            {isReady ? "Setup Ready" : "Setup Not Ready"}
           </span>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setAllConfigsReady(false)}
-        >
+        <Button variant="outline" size="sm" onClick={openDialog}>
           Checklist
         </Button>
       </div>
     </Card>
   );
-};
+}
 
 export default PhoneNumberChecklist;

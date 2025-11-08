@@ -1,0 +1,45 @@
+---
+description: Best practices for using Tailwind CSS in Next.js 15 and React 19 applications, including responsive design, custom configurations, and performance optimization.
+globs: app/**/*
+---
+
+- Use Tailwind's utility-first approach for consistent styling.
+- Leverage Tailwind's responsive prefixes (`sm:`, `md:`, `lg:`, `xl:`, `2xl:`) for mobile-first responsive design.
+- Use `@apply` directive sparingly; prefer utility classes directly in HTML/JSX.
+- Create custom components with `@layer components` for repeated patterns.
+- Use Tailwind's built-in design tokens for spacing, colors, and typography.
+- Implement dark mode using Tailwind's `dark:` variant.
+- Use `group` and `peer` variants for interactive states.
+- Create custom utilities with `@layer utilities` for project-specific needs.
+- Use `theme()` function to reference Tailwind's design tokens in custom CSS.
+- Avoid arbitrary values (`w-[532px]`) when possible; define custom values in `tailwind.config.js`.
+- Use `container` class for responsive containers with max-width constraints.
+- Implement proper focus styles for accessibility using `focus:` and `focus-within:` variants.
+- Use `sr-only` for screen reader-only content.
+- Optimize for production by purging unused styles with `NODE_ENV=production`.
+- Use plugins like `@tailwindcss/typography` for rich text content.
+- Configure `content` paths properly in `tailwind.config.js` for purging.
+- Extend themes rather than overriding default values when possible.
+- Use `preflight` to reset browser default styles.
+
+### Semantic Tokens Policy
+
+- Prefer semantic tokens from `app/globals.css` via Tailwind `@theme` mappings:
+  - Use `bg-background`, `text-foreground`, `text-muted-foreground`, `bg-accent`, `border-border`, `ring`, etc.
+  - Use `rounded-sm|md|lg` and spacing/typography scales (e.g., `p-4`, `gap-6`, `text-sm|base|lg`).
+- Forbidden in production code (unless a token is being added centrally):
+  - Hex/HSL classes: `text-[#111]`, `bg-[hsl(...)]`
+  - Inline styles for presentational values: `style={{ color: "#..." }}`
+  - Arbitrary sizes: `w-[532px]`, `rounded-[7px]`
+- Dark mode should use `dark:` with the same tokens; do not hardcode `black/white` for dark variants unless the token maps to it.
+- If a new value is required, extend tokens in `:root`/`.dark` and `@theme` (in `app/globals.css`) and/or Tailwind `theme.extend`. Then use the new token—not the raw value.
+
+Examples
+
+```tsx
+// ✅ Good
+<div className="bg-background text-foreground rounded-md p-4 border border-border" />
+
+// ❌ Avoid
+<div className="bg-[#0f0f0f] text-[hsl(0,0%,98%)] rounded-[7px] p-[18px] border border-[#222]" />
+```

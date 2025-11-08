@@ -41,7 +41,8 @@ const SessionConfigurationPanel: React.FC<SessionConfigurationPanelProps> = ({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Custom hook to fetch backend tools every 3 seconds
-  const backendTools = useBackendTools("http://localhost:8081/tools", 3000);
+  const backendTools = useBackendTools();
+  const backendToolList = Array.isArray(backendTools) ? backendTools : [];
 
   // Track changes to determine if there are unsaved modifications
   useEffect(() => {
@@ -117,7 +118,7 @@ const SessionConfigurationPanel: React.FC<SessionConfigurationPanelProps> = ({
     // Determine if the selected template is from local or backend
     let templateObj =
       toolTemplates.find((t) => t.name === val) ||
-      backendTools.find((t: any) => t.name === val);
+      backendToolList.find((t: any) => t.name === val);
 
     if (templateObj) {
       setEditingSchemaStr(JSON.stringify(templateObj, null, 2));
@@ -145,7 +146,7 @@ const SessionConfigurationPanel: React.FC<SessionConfigurationPanelProps> = ({
   };
 
   const isBackendTool = (name: string): boolean => {
-    return backendTools.some((t: any) => t.name === name);
+    return backendToolList.some((t: any) => t.name === name);
   };
 
   return (
@@ -282,7 +283,7 @@ const SessionConfigurationPanel: React.FC<SessionConfigurationPanelProps> = ({
         onTemplateChange={handleTemplateChange}
         onSchemaChange={onSchemaChange}
         onSave={handleDialogSave}
-        backendTools={backendTools}
+        backendTools={backendToolList}
       />
     </Card>
   );

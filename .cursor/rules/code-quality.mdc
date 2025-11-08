@@ -1,0 +1,14 @@
+---
+alwaysApply: true
+---
+
+<most-important-rules mark="unmost important">
+- think like a tasteful coder and make the code elegant and super easy to work with and build on top. 
+- write functional code over object-oriented code
+- always try to write 10x less verbose code
+- write like a human with limited time and resources not like a machine who can repeat the same code over and over again
+- make helper functions and re-useable components for part of the code that is used in multiple places
+- write 10x less verbose code than you would normally write
+- be tasteful about your coding patterns
+- adhere to the DRY principle, but not at the expense of readability
+</most-important-rules>

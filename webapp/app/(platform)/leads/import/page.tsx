@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -11,13 +11,23 @@ import { Upload, CheckCircle, XCircle, ArrowLeft } from 'lucide-react'
 import { leadApi, campaignApi } from '@/lib/api-client'
 import Link from 'next/link'
 
+const NO_CAMPAIGN_VALUE = 'none'
+
 export default function ImportLeadsPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [campaigns, setCampaigns] = useState<any[]>([])
-  const [selectedCampaign, setSelectedCampaign] = useState('')
+  const [selectedCampaign, setSelectedCampaign] = useState(NO_CAMPAIGN_VALUE)
   const [file, setFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<any>(null)
+
+  useEffect(() => {
+    const preselected = searchParams.get('campaignId')
+    if (preselected) {
+      setSelectedCampaign(preselected)
+    }
+  }, [searchParams])
 
   useEffect(() => {
     loadCampaigns()
@@ -73,10 +83,10 @@ export default function ImportLeadsPage() {
       const text = await file.text()
       const parsedLeads = parseCSV(text)
 
-      const importResults = await leadApi.import(
-        parsedLeads,
-        selectedCampaign || undefined
-      )
+      const campaignId =
+        selectedCampaign === NO_CAMPAIGN_VALUE ? undefined : selectedCampaign
+
+      const importResults = await leadApi.import(parsedLeads, campaignId)
 
       setResults(importResults.results)
     } catch (err: any) {
@@ -132,7 +142,7 @@ export default function ImportLeadsPage() {
                 <SelectValue placeholder="No campaign" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">No campaign</SelectItem>
+                <SelectItem value={NO_CAMPAIGN_VALUE}>No campaign</SelectItem>
                 {campaigns.map((campaign) => (
                   <SelectItem key={campaign.id} value={campaign.id}>
                     {campaign.name}

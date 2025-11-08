@@ -7,8 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-
-const API_BASE = 'http://localhost:8081/api'
+import { apiFetch } from '@/lib/backend-config'
 
 export default function CallDetailPage() {
   const params = useParams()
@@ -21,9 +20,7 @@ export default function CallDetailPage() {
 
   const loadCall = async () => {
     try {
-      const res = await fetch(`${API_BASE}/calls/${params.id}`, {
-        credentials: 'include',
-      })
+      const res = await apiFetch(`/calls/${params.id}`)
       if (res.ok) {
         const data = await res.json()
         setCall(data.callSession)

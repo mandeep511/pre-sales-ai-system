@@ -1,90 +1,94 @@
-'use client'
+"use client";
 
-import { useState, useEffect } from 'react'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Play, Pause, Square, RefreshCw } from 'lucide-react'
-
-const API_BASE = 'http://localhost:8081/api'
+import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Play, Pause, Square, RefreshCw } from "lucide-react";
+import { apiFetch } from "@/lib/backend-config";
+import { useCallReadiness } from "@/app/context/call-readiness-context";
 
 interface QueueControlsProps {
-  campaignId: string
+  campaignId: string;
 }
 
 export function QueueControls({ campaignId }: QueueControlsProps) {
-  const [status, setStatus] = useState<any>(null)
-  const [loading, setLoading] = useState(false)
+  const [status, setStatus] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const { ensureReady } = useCallReadiness();
 
-  useEffect(() => {
-    loadStatus()
-    const interval = setInterval(loadStatus, 5000)
-    return () => clearInterval(interval)
-  }, [campaignId])
-
-  const loadStatus = async () => {
+  const loadStatus = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/queue/status/${campaignId}`, {
-        credentials: 'include',
-      })
+      const res = await apiFetch(`/queue/status/${campaignId}`);
       if (res.ok) {
-        const data = await res.json()
-        setStatus(data)
+        const data = await res.json();
+        setStatus(data);
       }
     } catch (err) {
-      console.error('Failed to load queue status:', err)
+      console.error("Failed to load queue status:", err);
     }
-  }
+  }, [campaignId]);
 
-  const handleStart = async () => {
-    setLoading(true)
+  useEffect(() => {
+    loadStatus();
+    const interval = setInterval(loadStatus, 5000);
+    return () => clearInterval(interval);
+  }, [loadStatus]);
+
+  async function handleStart() {
+    const ready = await ensureReady();
+    if (!ready) return;
+    setLoading(true);
     try {
-      await fetch(`${API_BASE}/queue/start/${campaignId}`, {
-        method: 'POST',
-        credentials: 'include',
-      })
-      await loadStatus()
+      await apiFetch(`/queue/start/${campaignId}`, {
+        method: "POST",
+      });
+      await loadStatus();
     } catch (err) {
-      console.error('Failed to start queue:', err)
+      console.error("Failed to start queue:", err);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
-  const handlePause = async () => {
-    setLoading(true)
+  async function handlePause() {
+    setLoading(true);
     try {
-      await fetch(`${API_BASE}/queue/pause/${campaignId}`, {
-        method: 'POST',
-        credentials: 'include',
-      })
-      await loadStatus()
+      await apiFetch(`/queue/pause/${campaignId}`, {
+        method: "POST",
+      });
+      await loadStatus();
     } catch (err) {
-      console.error('Failed to pause queue:', err)
+      console.error("Failed to pause queue:", err);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
-  const handleStop = async () => {
-    setLoading(true)
+  async function handleStop() {
+    setLoading(true);
     try {
-      await fetch(`${API_BASE}/queue/stop/${campaignId}`, {
-        method: 'POST',
-        credentials: 'include',
-      })
-      await loadStatus()
+      await apiFetch(`/queue/stop/${campaignId}`, {
+        method: "POST",
+      });
+      await loadStatus();
     } catch (err) {
-      console.error('Failed to stop queue:', err)
+      console.error("Failed to stop queue:", err);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
-  if (!status) return <div>Loading queue status...</div>
+  if (!status) return <div>Loading queue status...</div>;
 
-  const isRunning = status.isRunning
-  const queueState = status.state
+  const isRunning = status.isRunning;
+  const queueState = status.state;
 
   return (
     <Card>
@@ -94,8 +98,8 @@ export function QueueControls({ campaignId }: QueueControlsProps) {
             <CardTitle>Queue Control</CardTitle>
             <CardDescription>Manage call queue processing</CardDescription>
           </div>
-          <Badge variant={isRunning ? 'default' : 'secondary'}>
-            {queueState?.status || 'idle'}
+          <Badge variant={isRunning ? "default" : "secondary"}>
+            {queueState?.status || "idle"}
           </Badge>
         </div>
       </CardHeader>
@@ -106,7 +110,9 @@ export function QueueControls({ campaignId }: QueueControlsProps) {
             <p className="text-xs text-muted-foreground">Queued</p>
           </div>
           <div>
-            <p className="text-2xl font-bold">{queueState?.totalCompleted || 0}</p>
+            <p className="text-2xl font-bold">
+              {queueState?.totalCompleted || 0}
+            </p>
             <p className="text-xs text-muted-foreground">Completed</p>
           </div>
           <div>
@@ -123,17 +129,32 @@ export function QueueControls({ campaignId }: QueueControlsProps) {
             </Button>
           ) : (
             <>
-              <Button onClick={handlePause} disabled={loading} variant="outline" className="flex-1">
+              <Button
+                onClick={handlePause}
+                disabled={loading}
+                variant="outline"
+                className="flex-1"
+              >
                 <Pause className="h-4 w-4 mr-2" />
                 Pause
               </Button>
-              <Button onClick={handleStop} disabled={loading} variant="destructive" className="flex-1">
+              <Button
+                onClick={handleStop}
+                disabled={loading}
+                variant="destructive"
+                className="flex-1"
+              >
                 <Square className="h-4 w-4 mr-2" />
                 Stop
               </Button>
             </>
           )}
-          <Button onClick={loadStatus} disabled={loading} variant="ghost" size="icon">
+          <Button
+            onClick={loadStatus}
+            disabled={loading}
+            variant="ghost"
+            size="icon"
+          >
             <RefreshCw className="h-4 w-4" />
           </Button>
         </div>
@@ -142,7 +163,7 @@ export function QueueControls({ campaignId }: QueueControlsProps) {
           <div className="pt-4 border-t">
             <p className="text-sm font-medium mb-2">Lead Status Breakdown</p>
             <div className="space-y-1 text-sm">
-              {status.leadCounts.map((count: any) => (
+              {(status.leadCounts as Array<any>).map((count) => (
                 <div key={count.status} className="flex justify-between">
                   <span className="text-muted-foreground">{count.status}</span>
                   <span className="font-medium">{count._count}</span>
@@ -153,5 +174,5 @@ export function QueueControls({ campaignId }: QueueControlsProps) {
         )}
       </CardContent>
     </Card>
-  )
+  );
 }

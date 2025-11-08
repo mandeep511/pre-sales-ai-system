@@ -9,6 +9,13 @@ export interface AuthenticatedUser {
   active?: boolean
 }
 
+declare module 'express-session' {
+  interface SessionData {
+    userId?: string
+    user?: AuthenticatedUser
+  }
+}
+
 export interface AuthRequest extends Request {
   user?: AuthenticatedUser
 }
@@ -51,7 +58,7 @@ const fetchUser = async (req: AuthRequest): Promise<AuthenticatedUser | null> =>
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, email: true, name: true, role: true },
+    select: { id: true, email: true, name: true, role: true, active: true },
   })
 
   if (!user) {

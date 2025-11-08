@@ -7,6 +7,8 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import cors from 'cors'
 import session from 'express-session'
+import { RedisStore } from 'connect-redis'
+import helmet from 'helmet'
 import {
   handleCallConnection,
   handleFrontendConnection,
@@ -15,6 +17,8 @@ import {
 } from './sessionManager'
 import functions from './functionHandlers'
 import { requireAuth, optionalAuth, AuthRequest } from './middleware/auth'
+import { authRateLimit } from './middleware/rateLimit'
+import { validateTwilioSignature } from './middleware/twilio'
 import campaignRoutes from './routes/campaigns'
 import leadRoutes from './routes/leads'
 import authRoutes from './routes/auth'
@@ -29,28 +33,59 @@ dotenv.config()
 const PORT = parseInt(process.env.PORT || '8081', 10)
 const PUBLIC_URL = process.env.PUBLIC_URL || ''
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || ''
+const SESSION_SECRET = process.env.SESSION_SECRET
 
 if (!OPENAI_API_KEY) {
   console.error('OPENAI_API_KEY environment variable is required')
   process.exit(1)
 }
 
-const app = express()
-const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000'
+if (!SESSION_SECRET) {
+  console.error('SESSION_SECRET environment variable is required')
+  process.exit(1)
+}
 
-app.use(cors({ origin: corsOrigin, credentials: true }))
+if (process.env.NODE_ENV === 'production' && !PUBLIC_URL) {
+  console.warn('WARNING: PUBLIC_URL not set in production. Twilio webhooks may fail.')
+}
+
+const app = express()
+
+// Parse CORS_ORIGIN as a comma-separated list, default to localhost
+const corsOriginEnv = process.env.CORS_ORIGIN || 'http://localhost:3000'
+const allowedOrigins = corsOriginEnv.split(',').map(origin => origin.trim())
+
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1)
+}
+
+app.use(helmet())
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Allow requests with no origin, like mobile apps or curl, and always allow for matching origins
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true)
+      } else {
+        callback(new Error('Not allowed by CORS'))
+      }
+    },
+    credentials: true,
+  })
+)
 app.use(express.json())
 app.use(express.urlencoded({ extended: false }))
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
+    store: new RedisStore({ client: redis, prefix: 'sess:' }),
+    secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
     cookie: {
       maxAge: 7 * 24 * 60 * 60 * 1000,
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     },
   })
 )
@@ -69,17 +104,22 @@ app.get('/public-url', optionalAuth, (req, res) => {
   res.json({ publicUrl: PUBLIC_URL })
 })
 
-app.get('/twiml', async (req, res) => {
+app.get('/twiml', validateTwilioSignature, async (req, res) => {
   const { callSessionId } = req.query as { callSessionId?: string }
 
-  let twimlTemplate = readFileSync(twimlPath, 'utf-8')
+  if (!PUBLIC_URL) {
+    return res.status(500).send('PUBLIC_URL not configured')
+  }
 
-  const wsHost = req.get('host')
-  const wsUrl = `wss://${wsHost}/call${
+  const wsUrl = `${PUBLIC_URL.replace(/^https?/, (m) => m === 'https' ? 'wss' : 'ws')}/call${
     callSessionId ? `?callSessionId=${callSessionId}` : ''
   }`
 
-  twimlTemplate = twimlTemplate.replace('{{WS_URL}}', wsUrl)
+  const twimlTemplate = readFileSync(twimlPath, 'utf-8').replace(
+    '{{WS_URL}}',
+    wsUrl
+  )
+
   res.type('text/xml')
   res.send(twimlTemplate)
 })
@@ -132,7 +172,7 @@ wss.on('connection', async (ws: WebSocket, req: IncomingMessage) => {
   }
 })
 
-app.post('/api/call-status', express.json(), async (req, res) => {
+app.post('/api/call-status', validateTwilioSignature, express.json(), async (req, res) => {
   const { CallSid, CallStatus } = req.body
 
   console.log(`Call ${CallSid} status: ${CallStatus}`)

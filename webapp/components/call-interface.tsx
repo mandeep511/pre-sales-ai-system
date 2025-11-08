@@ -1,24 +1,35 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import ChecklistAndConfig from "@/components/checklist-and-config";
+import React, { useEffect, useState } from "react";
 import SessionConfigurationPanel from "@/components/session-configuration-panel";
 import Transcript from "@/components/transcript";
 import FunctionCallsPanel from "@/components/function-calls-panel";
 import { Item } from "@/components/types";
 import handleRealtimeEvent from "@/lib/handle-realtime-event";
 import PhoneNumberChecklist from "@/components/phone-number-checklist";
+import { buildBackendWsUrl } from "@/lib/backend-config";
+import { useCallReadiness } from "@/app/context/call-readiness-context";
 
-const CallInterface = () => {
-  const [selectedPhoneNumber, setSelectedPhoneNumber] = useState("");
-  const [allConfigsReady, setAllConfigsReady] = useState(false);
-  const [items, setItems] = useState<Item[]>([]);
+const LOGS_WS_URL = buildBackendWsUrl("/logs");
+
+function CallInterface() {
+  const [items, setItems] = useState<Array<Item>>([]);
   const [callStatus, setCallStatus] = useState("disconnected");
   const [ws, setWs] = useState<WebSocket | null>(null);
+  const { isReady, autoOpenIfNeeded } = useCallReadiness();
 
   useEffect(() => {
-    if (allConfigsReady && !ws) {
-      const newWs = new WebSocket("ws://localhost:8081/logs");
+    autoOpenIfNeeded();
+  }, [autoOpenIfNeeded]);
+
+  useEffect(() => {
+    if (!isReady && ws) {
+      ws.close();
+      return;
+    }
+
+    if (isReady && !ws) {
+      const newWs = new WebSocket(LOGS_WS_URL);
 
       newWs.onopen = () => {
         console.log("Connected to logs websocket");
@@ -39,16 +50,19 @@ const CallInterface = () => {
 
       setWs(newWs);
     }
-  }, [allConfigsReady, ws]);
+  }, [isReady, ws]);
+
+  useEffect(
+    () => () => {
+      if (ws) {
+        ws.close();
+      }
+    },
+    [ws]
+  );
 
   return (
     <div className="flex flex-col gap-4">
-      <ChecklistAndConfig
-        ready={allConfigsReady}
-        setReady={setAllConfigsReady}
-        selectedPhoneNumber={selectedPhoneNumber}
-        setSelectedPhoneNumber={setSelectedPhoneNumber}
-      />
       <div className="grid grid-cols-12 gap-4 min-h-[600px]">
         <div className="col-span-3 flex flex-col overflow-hidden">
           <SessionConfigurationPanel
@@ -69,11 +83,7 @@ const CallInterface = () => {
         </div>
 
         <div className="col-span-6 flex flex-col gap-4 overflow-hidden">
-          <PhoneNumberChecklist
-            selectedPhoneNumber={selectedPhoneNumber}
-            allConfigsReady={allConfigsReady}
-            setAllConfigsReady={setAllConfigsReady}
-          />
+          <PhoneNumberChecklist />
           <Transcript items={items} />
         </div>
 
@@ -83,6 +93,6 @@ const CallInterface = () => {
       </div>
     </div>
   );
-};
+}
 
 export default CallInterface;

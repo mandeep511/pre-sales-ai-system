@@ -1,10 +1,12 @@
 import { Router } from 'express'
 import { prisma } from '../lib/prisma'
 import { AuthRequest } from '../middleware/auth'
+import { authRateLimit } from '../middleware/rateLimit'
+import bcrypt from 'bcrypt'
 
 const router = Router()
 
-router.post('/login', async (req: AuthRequest, res) => {
+router.post('/login', authRateLimit, async (req: AuthRequest, res) => {
   try {
     const { email, password } = req.body as { email?: string; password?: string }
 
@@ -14,23 +16,48 @@ router.post('/login', async (req: AuthRequest, res) => {
 
     const user = await prisma.user.findUnique({
       where: { email },
-      select: { id: true, email: true, name: true, role: true, password: true },
+      select: { id: true, email: true, name: true, role: true, password: true, active: true },
     })
 
-    if (!user || user.password !== password) {
+    if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' })
     }
 
-    req.session.userId = user.id
-    req.session.user = {
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
+    if (user.active === false) {
+      return res.status(401).json({ error: 'Account is inactive' })
     }
 
-    const { password: _password, ...userWithoutPassword } = user
-    res.json({ user: userWithoutPassword })
+    const isPasswordValid = await bcrypt.compare(password, user.password)
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Invalid credentials' })
+    }
+
+    req.session.regenerate((regenerateError) => {
+      if (regenerateError) {
+        console.error('Session regeneration failed:', regenerateError)
+        return res.status(500).json({ error: 'Login failed' })
+      }
+
+      req.session.userId = user.id
+      req.session.user = {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        active: user.active,
+      }
+
+      req.session.save((saveError) => {
+        if (saveError) {
+          console.error('Session save failed:', saveError)
+          return res.status(500).json({ error: 'Login failed' })
+        }
+
+        const { password: _password, ...userWithoutPassword } = user
+        res.json({ user: userWithoutPassword })
+      })
+    })
   } catch (error) {
     console.error('Login error:', error)
     res.status(500).json({ error: 'Login failed' })
@@ -59,7 +86,7 @@ router.get('/me', async (req: AuthRequest, res) => {
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true, email: true, name: true, role: true },
+      select: { id: true, email: true, name: true, role: true, active: true },
     })
 
     if (!user) {

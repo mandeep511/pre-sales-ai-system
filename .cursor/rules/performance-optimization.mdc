@@ -1,0 +1,18 @@
+---
+description: Performance optimization strategies for Next.js 15 and React 19 applications, including bundle optimization, caching, and rendering strategies.
+globs: app/**/*
+---
+- Implement proper caching strategies with `cache` function for data fetching.
+- Use `loading.tsx` for skeleton screens and improved perceived performance.
+- Minimize the number of re-renders by using `useMemo` and `useCallback`
+- Avoid using `useEffect` when not needed
+- Implement proper lazy loading for components and images.
+- Use `useTransition` for non-urgent updates to maintain responsiveness.
+- Use `React.memo` for components with expensive render operations.
+- Implement proper pagination for large data sets.
+- Use `useDeferredValue` for deferring UI updates that aren't urgent.
+- Optimize API routes with proper caching headers.
+- Implement proper error boundaries to prevent cascading failures.
+- Use `prefetch` for links to preload pages and data.
+- Use `generateStaticParams` for static generation of dynamic routes.
+- Use `useOptimistic` for optimistic UI updates to improve perceived performance.

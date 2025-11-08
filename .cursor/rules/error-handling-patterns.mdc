@@ -1,0 +1,37 @@
+---
+description: Error handling patterns for Next.js 15 and React 19 applications, including error boundaries, API error handling, and graceful degradation strategies.
+globs: app/**/*
+---
+## Error Boundaries & UI
+- Use Error Boundaries at appropriate component hierarchy levels (including RSC)
+- Implement fallback UI for error states
+- Use Next.js error pages: `error.tsx`, `not-found.tsx`, `global-error.tsx`
+
+## API & Async Operations
+- Wrap async operations in try/catch blocks
+- Return proper HTTP status codes (4xx client, 5xx server)
+- Centralize API error handling with interceptors/wrappers
+- Implement timeouts and circuit breakers for external services
+- Handle streaming responses (AI services, etc.)
+
+## Error Recovery & Resilience
+- Implement retry mechanisms for transient failures
+- Validate inputs before processing
+- Use error codes for debugging (not generic messages)
+
+## Logging & Monitoring
+- Log errors with Sentry/LogRocket in production
+- Use environment-specific verbosity (verbose dev, minimal prod)
+- Track errors with monitoring services
+
+## Specific Contexts
+- Server actions & form submissions
+- Database operations & connection pooling
+- File uploads & processing
+- Authentication & authorization
+- Third-party API integrations
+- WebSocket & real-time features
+
+## Security & Serialization
+- Show informative but non-sensitive error messages to users
+- Properly serialize errors when passing server → client

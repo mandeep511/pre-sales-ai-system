@@ -6,15 +6,17 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Edit, Trash2 } from 'lucide-react'
+import { Edit, Trash2, PlusCircle, Upload } from 'lucide-react'
 import { campaignApi } from '@/lib/api-client'
 import { QueueControls } from '@/components/queue-controls'
+import { LeadFormDialog } from '@/components/lead-form-dialog'
 
 export default function CampaignDetailPage() {
   const params = useParams()
   const router = useRouter()
   const [campaign, setCampaign] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [showAddLeadDialog, setShowAddLeadDialog] = useState(false)
 
   useEffect(() => {
     loadCampaign()
@@ -65,6 +67,19 @@ export default function CampaignDetailPage() {
             Archive
           </Button>
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => setShowAddLeadDialog(true)}>
+          <PlusCircle className="h-4 w-4 mr-2" />
+          Add Lead
+        </Button>
+        <Button variant="outline" asChild>
+          <Link href={`/leads/import?campaignId=${campaign.id}`}>
+            <Upload className="h-4 w-4 mr-2" />
+            Import Leads
+          </Link>
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -126,6 +141,16 @@ export default function CampaignDetailPage() {
           </dl>
         </CardContent>
       </Card>
+
+      <LeadFormDialog
+        open={showAddLeadDialog}
+        onOpenChange={setShowAddLeadDialog}
+        defaultCampaignId={campaign.id}
+        defaultCampaignName={campaign.name}
+        onSuccess={() => {
+          loadCampaign()
+        }}
+      />
     </div>
   )
 }

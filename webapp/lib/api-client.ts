@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081/api'
+import { apiFetch } from './backend-config'
 
 interface Lead {
   id: string
@@ -51,10 +51,6 @@ const jsonHeaders = {
   'Content-Type': 'application/json',
 }
 
-const withCredentials = {
-  credentials: 'include' as const,
-}
-
 type ListParams = {
   status?: string
   campaignId?: string
@@ -86,23 +82,22 @@ export const leadApi = {
       })
     }
 
-    const res = await fetch(`${API_BASE}/leads?${queryParams.toString()}`, withCredentials)
+    const res = await apiFetch(`/leads?${queryParams.toString()}`)
     if (!res.ok) throw new Error('Failed to fetch leads')
     return res.json()
   },
 
   get: async (id: string): Promise<Lead> => {
-    const res = await fetch(`${API_BASE}/leads/${id}`, withCredentials)
+    const res = await apiFetch(`/leads/${id}`)
     if (!res.ok) throw new Error('Failed to fetch lead')
     const data = await res.json()
     return data.lead
   },
 
   create: async (lead: Partial<Lead>): Promise<Lead> => {
-    const res = await fetch(`${API_BASE}/leads`, {
+    const res = await apiFetch('/leads', {
       method: 'POST',
       headers: jsonHeaders,
-      ...withCredentials,
       body: JSON.stringify(lead),
     })
 
@@ -116,10 +111,9 @@ export const leadApi = {
   },
 
   update: async (id: string, lead: Partial<Lead>): Promise<Lead> => {
-    const res = await fetch(`${API_BASE}/leads/${id}`, {
+    const res = await apiFetch(`/leads/${id}`, {
       method: 'PUT',
       headers: jsonHeaders,
-      ...withCredentials,
       body: JSON.stringify(lead),
     })
 
@@ -133,10 +127,9 @@ export const leadApi = {
   },
 
   bulkUpdateTags: async (leadIds: string[], addTags?: string[], removeTags?: string[]): Promise<void> => {
-    const res = await fetch(`${API_BASE}/leads/bulk/tags`, {
+    const res = await apiFetch('/leads/bulk/tags', {
       method: 'POST',
       headers: jsonHeaders,
-      ...withCredentials,
       body: JSON.stringify({ leadIds, addTags, removeTags }),
     })
 
@@ -144,10 +137,9 @@ export const leadApi = {
   },
 
   bulkAssignCampaign: async (leadIds: string[], campaignId: string): Promise<void> => {
-    const res = await fetch(`${API_BASE}/leads/bulk/assign-campaign`, {
+    const res = await apiFetch('/leads/bulk/assign-campaign', {
       method: 'POST',
       headers: jsonHeaders,
-      ...withCredentials,
       body: JSON.stringify({ leadIds, campaignId }),
     })
 
@@ -155,10 +147,9 @@ export const leadApi = {
   },
 
   import: async (leads: any[], campaignId?: string): Promise<any> => {
-    const res = await fetch(`${API_BASE}/leads/import`, {
+    const res = await apiFetch('/leads/import', {
       method: 'POST',
       headers: jsonHeaders,
-      ...withCredentials,
       body: JSON.stringify({ leads, campaignId }),
     })
 
@@ -167,9 +158,8 @@ export const leadApi = {
   },
 
   archive: async (id: string): Promise<void> => {
-    const res = await fetch(`${API_BASE}/leads/${id}`, {
+    const res = await apiFetch(`/leads/${id}`, {
       method: 'DELETE',
-      ...withCredentials,
     })
 
     if (!res.ok) throw new Error('Failed to archive lead')
@@ -178,24 +168,23 @@ export const leadApi = {
 
 export const campaignApi = {
   list: async (): Promise<Campaign[]> => {
-    const res = await fetch(`${API_BASE}/campaigns`, withCredentials)
+    const res = await apiFetch('/campaigns')
     if (!res.ok) throw new Error('Failed to fetch campaigns')
     const data = await res.json()
     return data.campaigns
   },
 
   get: async (id: string): Promise<Campaign> => {
-    const res = await fetch(`${API_BASE}/campaigns/${id}`, withCredentials)
+    const res = await apiFetch(`/campaigns/${id}`)
     if (!res.ok) throw new Error('Failed to fetch campaign')
     const data = await res.json()
     return data.campaign
   },
 
   create: async (campaign: Partial<Campaign>): Promise<Campaign> => {
-    const res = await fetch(`${API_BASE}/campaigns`, {
+    const res = await apiFetch('/campaigns', {
       method: 'POST',
       headers: jsonHeaders,
-      ...withCredentials,
       body: JSON.stringify(campaign),
     })
 
@@ -209,10 +198,9 @@ export const campaignApi = {
   },
 
   update: async (id: string, campaign: Partial<Campaign>): Promise<Campaign> => {
-    const res = await fetch(`${API_BASE}/campaigns/${id}`, {
+    const res = await apiFetch(`/campaigns/${id}`, {
       method: 'PUT',
       headers: jsonHeaders,
-      ...withCredentials,
       body: JSON.stringify(campaign),
     })
 
@@ -226,9 +214,8 @@ export const campaignApi = {
   },
 
   archive: async (id: string): Promise<void> => {
-    const res = await fetch(`${API_BASE}/campaigns/${id}`, {
+    const res = await apiFetch(`/campaigns/${id}`, {
       method: 'DELETE',
-      ...withCredentials,
     })
 
     if (!res.ok) throw new Error('Failed to archive campaign')

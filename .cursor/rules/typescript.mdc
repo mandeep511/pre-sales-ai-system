@@ -1,0 +1,14 @@
+---
+description: Applies general coding principles and best practices for TypeScript and React development across the project.
+globs: **/*.ts,**/*.tsx
+---
+- Use `kebab-case` for all file names
+- Prefer `function` over `const` for functions
+- Use `Array<T>` over `T[]` for arrays
+- Use `camelCase` for schema names and add `Schema` suffix to all
+- Follow DRY (Don't Repeat Yourself) principle.
+- Implement early returns for better readability.
+- Prefer interfaces over types.
+- Avoid enums; use const maps instead.
+- Implement proper type safety and inference.
+- Use `satisfies` operator for type validation.

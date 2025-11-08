@@ -4,6 +4,7 @@ import { useAuth } from '@/app/context/auth-context'
 import { Button } from '@/components/ui/button'
 import { LogOut, User } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { CallReadinessIndicator } from '@/components/call-readiness-indicator'
 
 export function TopBar() {
   const { user, logout, isLoading } = useAuth()
@@ -17,6 +18,7 @@ export function TopBar() {
   return (
     <header className="h-16 border-b border-border bg-card px-6 flex items-center justify-between">
       <div className="flex items-center gap-4">
+        <CallReadinessIndicator />
       </div>
 
       <div className="flex items-center gap-4">

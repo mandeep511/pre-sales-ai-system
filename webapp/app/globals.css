@@ -65,5 +65,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    max-height: 100svh;
+    overflow: hidden;
   }
 }
